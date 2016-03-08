@@ -1,14 +1,13 @@
 import numpy as np
-from scipy.sparse import diags # Construct a sparse matrix from diagonals
-#from scipy.sparse import linalg # Linear algebra for sparse matrix
+from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
-import matplotlib.pyplot as plt # plotting facility
+import matplotlib.pyplot as plt # Plotting facility
 
 
-class CentralDiffQHamiltonian:
+class MUBQHamiltonian:
     """
-    Generate quantum Hamiltonian for 1D system in the coordinate representation
-    using the central difference approximation.
+    Generate quantum Hamiltonian, H(x,p) = K(p) + V(x),
+    for 1D system in the coordinate representation using mutually unbiased bases (MUB).
     """
     def __init__(self, **kwards):
         """
@@ -16,6 +15,7 @@ class CentralDiffQHamiltonian:
             X_gridDIM - specifying the grid size
             X_amplitude - maximum value of the coordinates
             V(x) - potential energy (as a function)
+            K(p) - momentum dependent part of the hamiltonian (as a function)
         """
 
         # save all attributes
@@ -38,18 +38,26 @@ class CentralDiffQHamiltonian:
         except AttributeError:
             raise AttributeError("Potential energy (V) was not specified")
 
+        try:
+            self.K
+        except AttributeError:
+            raise AttributeError("Momentum dependence (K) was not specified")
+
+        # get coordinate step size
+        self.dX = 2.*self.X_amplitude / self.X_gridDIM
+
         # generate coordinate range
-        self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude, self.X_gridDIM)
+        self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
 
-        # save the coordinate step size
-        self.dX = self.X_range[1] - self.X_range[0]
+        # generate momentum range as it corresponds to FFT frequencies
+        self.P_range = fftpack.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
 
-        # Construct the kinetic energy part as sparse matrix from diagonal
-        self.Hamiltonian = diags([1., -2., 1.], [-1, 0, 1], shape=(self.X_gridDIM, self.X_gridDIM))
-        self.Hamiltonian *= -0.5/(self.dX**2)
+        # Construct the momentum dependent part
+        self.Hamiltonian = fftpack.fft(np.diag(self.K(self.P_range)), axis=1, overwrite_x=True)
+        self.Hamiltonian = fftpack.ifft(self.Hamiltonian, axis=0, overwrite_x=True)
 
         # Add diagonal potential energy
-        self.Hamiltonian = self.Hamiltonian + diags(self.V(self.X_range), 0)
+        self.Hamiltonian += np.diag(self.V(self.X_range))
 
 ##############################################################################
 #
@@ -59,18 +67,19 @@ class CentralDiffQHamiltonian:
 
 if __name__ == '__main__':
 
-    print("Central difference Hamiltonian")
+    print("Hamiltonian via mutually unbiased bases (MUB)")
 
     for omega in [4., 8.]:
         # Find energies of a harmonic oscillator V = 0.5*(omega*x)**2
-        harmonic_osc = CentralDiffQHamiltonian(
+        harmonic_osc = MUBQHamiltonian(
                             X_gridDIM=512,
                             X_amplitude=5.,
-                            V=lambda x: 0.5*(omega*x)**2
+                            V=lambda x: 0.5*(omega*x)**2,
+                            K=lambda p: 0.5*p**2
                         )
         # get real sorted energies and underlying wavefunctions
         # using specialized function for Hermitian matrices
-        energies, wavefunctions = linalg.eigh(harmonic_osc.Hamiltonian.toarray())
+        energies, wavefunctions = linalg.eigh(harmonic_osc.Hamiltonian)
 
         print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
         print energies[:20]

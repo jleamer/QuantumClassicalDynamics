@@ -14,7 +14,7 @@ class ForwardDiffQHamiltonian:
         The following parameters must be specified
             X_gridDIM - specifying the grid size
             X_amplitude - maximum value of the coordinates
-            V - potential energy (as a function)
+            V(x) - potential energy (as a function)
         """
 
         # save all attributes

@@ -44,7 +44,7 @@ class BackwardDiffQHamiltonian:
         self.dX = self.X_range[1] - self.X_range[0]
 
         # Construct the kinetic energy part as sparse matrix from diagonal
-        self.Hamiltonian = diags([1., -2., 1.], [0, 1, 2], shape=(self.X_gridDIM, self.X_gridDIM))
+        self.Hamiltonian = diags([1., -2., 1.], [-2, -1, 0], shape=(self.X_gridDIM, self.X_gridDIM))
         self.Hamiltonian *= -0.5/(self.dX**2)
 
         # Add diagonal potential energy

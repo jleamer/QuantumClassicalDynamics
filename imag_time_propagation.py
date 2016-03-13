@@ -1,6 +1,7 @@
 """
 Demonstration of the imaginary time propagation to obtain the ground and excited state.
 """
+
 import numpy as np
 from split_op_schrodinger1D import SplitOpSchrodinger1D # Previously developed propagator
 from scipy import linalg # Linear algebra for dense matrix
@@ -38,7 +39,6 @@ atom_sys.set_wavefunction(
 
 # perform the imaginary time propagation (the longer, the better)
 ground_state = atom_sys.propagate(4000)
-print(linalg.norm(ground_state.imag))
 
 # get "exact" ground state by diagonalizing the MUB hamiltonian
 from mub_qhamiltonian import MUBQHamiltonian

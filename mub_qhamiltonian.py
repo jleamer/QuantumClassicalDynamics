@@ -59,6 +59,38 @@ class MUBQHamiltonian:
         # Add diagonal potential energy
         self.Hamiltonian += np.diag(self.V(self.X_range))
 
+    def get_eigenstate(self, n):
+        """
+        Return n-th eigenfunction
+        :param n: order
+        :return: a copy of numpy array containing eigenfunction
+        """
+        # check whether the hamiltonian has been diagonalized
+        try:
+            self.eigenstates
+        except AttributeError:
+            # eigenstates have not been calculated so
+            # get real sorted energies and underlying wavefunctions
+            # using specialized function for Hermitian matrices
+            self.energies, self.eigenstates = linalg.eigh(self.Hamiltonian)
+
+        return np.copy(self.eigenstates[:,n].real)
+
+    def get_energy(self, n):
+        """
+        Return the energy of the n-th eigenfunction
+        :param n: order
+        :return: real value
+        """
+        # check whether the hamiltonian has been diagonalized
+        try:
+            self.energies
+        except AttributeError:
+            # eigenvalues have not been calculated so
+            self.energies, self.eigenstates = linalg.eigh(self.Hamiltonian)
+
+        return np.real(self.energies[n])
+
 ##############################################################################
 #
 #   Run some examples
@@ -77,16 +109,13 @@ if __name__ == '__main__':
                             V=lambda x: 0.5*(omega*x)**2,
                             K=lambda p: 0.5*p**2
                         )
-        # get real sorted energies and underlying wavefunctions
-        # using specialized function for Hermitian matrices
-        energies, wavefunctions = linalg.eigh(harmonic_osc.Hamiltonian)
-
-        print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
-        print energies[:20]
 
         # plot eigenfunctions
         for n in range(4):
-            plt.plot(harmonic_osc.X_range, wavefunctions[:,n], label=str(n))
+            plt.plot(harmonic_osc.X_range, harmonic_osc.get_eigenstate(n), label=str(n))
+
+        print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
+        print(harmonic_osc.energies[:20])
 
         plt.title("Eigenfunctions for harmonic oscillator with omega = %.2f (a.u.)" % omega)
         plt.xlabel('$x$ (a.u.)')

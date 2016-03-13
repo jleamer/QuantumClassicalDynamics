@@ -167,11 +167,6 @@ if __name__ == '__main__':
             K=lambda p: 0.5*p**2
         )
 
-        harmonic_osc = SplitOpSchrodinger1D(**harmonic_osc_params)
-        psi = harmonic_osc.eigenstates()
-        plt.plot(harmonic_osc.X_range, psi.real)
-        plt.show()
-        exit()
         ##################################################################################################
 
         # create the harmonic oscillator with time-independent hamiltonian
@@ -240,10 +235,10 @@ if __name__ == '__main__':
         # as the second test, let's check that an eigenstate state is a stationary state
         # to find a good ground state let's use the mutually unbiased bases method already implemented
         from mub_qhamiltonian import MUBQHamiltonian
-        eigenstates = linalg.eigh(MUBQHamiltonian(**harmonic_osc_params).Hamiltonian)[1]
+        eigenstate = MUBQHamiltonian(**harmonic_osc_params).get_eigenstate(3)
 
         # set the initial condition
-        harmonic_osc.set_wavefunction(eigenstates[:,3])
+        harmonic_osc.set_wavefunction(eigenstate)
 
         plt.subplot(121)
         plt.title("Test 2: Time evolution of eigenstate obtained via MUB")
@@ -265,10 +260,10 @@ if __name__ == '__main__':
 
         # let's see what happens if we use an eigenstate generated via the central finite difference method
         from central_diff_qhamiltonian import CentralDiffQHamiltonian
-        eigenstates = linalg.eigh(CentralDiffQHamiltonian(**harmonic_osc_params).Hamiltonian.toarray())[1]
+        eigenstate = CentralDiffQHamiltonian(**harmonic_osc_params).get_eigenstate(3)
 
         # set the initial condition
-        harmonic_osc.set_wavefunction(eigenstates[:,3])
+        harmonic_osc.set_wavefunction(eigenstate)
 
         plt.subplot(122)
         plt.title("Test 3: Time evolution of eigenstate obtained via central finite difference")

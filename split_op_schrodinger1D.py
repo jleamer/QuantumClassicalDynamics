@@ -65,6 +65,9 @@ class SplitOpSchrodinger1D:
         # generate momentum range as it corresponds to FFT frequencies
         self.P_range = fftpack.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
 
+        # get the momentum step size
+        self.dP = self.P_range[1] - self.P_range[0]
+
         try:
             # Pre-calculate the exponent, if the potential is time independent
             self._expV = np.exp(-self.dt*1j*self.V(self.X_range))
@@ -97,8 +100,10 @@ class SplitOpSchrodinger1D:
             # going back to the coordinate representation
             self.wavefunction = fftpack.ifft(self.wavefunction, overwrite_x=True)
 
-            # normalize (this step is in principle optional)
-            self.wavefunction /= np.sqrt(np.sum(np.abs(self.wavefunction)**2)*self.dX)
+            # normalize
+            # this line is equivalent to
+            # self.wavefunction /= np.sqrt(np.sum(np.abs(self.wavefunction)**2)*self.dX)
+            self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
 
             # increment current time
             self.t += self.dt
@@ -127,6 +132,19 @@ class SplitOpSchrodinger1D:
             # re-calculate the exponent
             return np.exp(-self.dt*1j*self.K(self.X_range, t))
 
+    def set_wavefunction(self, wavefunc):
+        """
+        Set the initial wave function
+        :param wavefunc: 1D numoy array contaning the wave function
+        :return: self
+        """
+        # perform the consistency checks
+        assert wavefunc.shape == self.X_range.shape,\
+            "The grid size does not match with the wave function"
+
+        self.wavefunction = wavefunc + 0j
+        return self
+
 ##############################################################################
 #
 #   Run some examples
@@ -144,37 +162,74 @@ if __name__ == '__main__':
         harmonic_osc_params = dict(
             X_gridDIM=512,
             X_amplitude=5.,
-            dt=0.001,
+            dt=0.01,
             V=lambda x: 0.5*(omega*x)**2,
             K=lambda p: 0.5*p**2
         )
 
+        harmonic_osc = SplitOpSchrodinger1D(**harmonic_osc_params)
+        psi = harmonic_osc.eigenstates()
+        plt.plot(harmonic_osc.X_range, psi.real)
+        plt.show()
+        exit()
         ##################################################################################################
 
         # create the harmonic oscillator with time-independent hamiltonian
         harmonic_osc = SplitOpSchrodinger1D(**harmonic_osc_params)
 
-        # set the initial condition (note that the wave function should be of complex type)
-        harmonic_osc.wavefunction = np.exp(-(harmonic_osc.X_range - 2)**2) + 0j
+        # set the initial condition
+        harmonic_osc.set_wavefunction(np.exp(-(harmonic_osc.X_range - 3.)**2))
 
         # get time duration of 6 periods
         T = 6* 2.*np.pi/omega
-        time_steps = int(T/harmonic_osc.dt)
+        # get number of steps necessary to reach time T
+        time_steps = int(round(T/harmonic_osc.dt))
 
+        # propagate till time T and for each time step save a probability density
+        wavefunctions = [harmonic_osc.propagate().copy() for _ in xrange(time_steps)]
+
+        plt.subplot(121)
         plt.title("Test 1: Time evolution of harmonic oscillator with $\\omega$ = %.2f (a.u.)" % omega)
 
-        # propagate for time T and for each time step save a probability density
-        density = [np.abs(harmonic_osc.propagate())**2 for _ in xrange(time_steps)]
-
-        # plot
+        # plot the time dependent density
         plt.imshow(
-            density,
+            np.abs(wavefunctions)**2,
             # some plotting parameters
             origin='lower',
             extent=[harmonic_osc.X_range.min(), harmonic_osc.X_range.max(), 0., time_steps*harmonic_osc.dt]
         )
         plt.xlabel('coordinate $x$ (a.u.)')
         plt.ylabel('time $t$ (a.u.)')
+
+        ##################################################################################################
+
+        plt.subplot(122)
+        plt.title("Verify the first Ehrenfest theorem")
+
+        # to verify the first Ehrenfest theorem,
+        # calculate <X>(t) using the fact that the zero axis in wavefunctions corresponds to time
+        X_average = np.sum(
+            np.abs(wavefunctions)**2 * harmonic_osc.X_range[np.newaxis,:],
+            axis=1
+        ) * harmonic_osc.dX
+
+        # get the density in the momentum representation
+        density_p = np.abs(fftpack.fft(wavefunctions, axis=1))**2
+        # normalize it along the momentum axis
+        density_p /= np.sum(density_p, axis=1)[:, np.newaxis] * harmonic_osc.dP
+
+        # calculate <P>(t)
+        P_average = np.sum(
+            density_p * harmonic_osc.P_range[np.newaxis,:],
+            axis=1
+        ) * harmonic_osc.dP
+
+        times = harmonic_osc.dt * np.arange(time_steps)
+        plt.plot(times, np.gradient(X_average, harmonic_osc.dt), '-r', label='$d\\langle\\hat{x}\\rangle / dt$')
+        plt.plot(times, P_average, '--b', label='$\\langle\\hat{p}\\rangle$')
+        plt.legend()
+        plt.ylabel('momentum')
+        plt.xlabel('time $t$ (a.u.)')
         plt.show()
 
         ##################################################################################################
@@ -182,13 +237,13 @@ if __name__ == '__main__':
         # re-create the harmonic oscillator
         harmonic_osc = SplitOpSchrodinger1D(**harmonic_osc_params)
 
-        # as the second test, let's check that the ground state is a stationary state
+        # as the second test, let's check that an eigenstate state is a stationary state
         # to find a good ground state let's use the mutually unbiased bases method already implemented
         from mub_qhamiltonian import MUBQHamiltonian
         eigenstates = linalg.eigh(MUBQHamiltonian(**harmonic_osc_params).Hamiltonian)[1]
 
         # set the initial condition
-        harmonic_osc.wavefunction = eigenstates[:,3] + 0j
+        harmonic_osc.set_wavefunction(eigenstates[:,3])
 
         plt.subplot(121)
         plt.title("Test 2: Time evolution of eigenstate obtained via MUB")
@@ -208,12 +263,12 @@ if __name__ == '__main__':
         # re-create the harmonic oscillator
         harmonic_osc = SplitOpSchrodinger1D(**harmonic_osc_params)
 
-        # let's see what happens if we use and eigenstate generated via the central finite difference method
+        # let's see what happens if we use an eigenstate generated via the central finite difference method
         from central_diff_qhamiltonian import CentralDiffQHamiltonian
         eigenstates = linalg.eigh(CentralDiffQHamiltonian(**harmonic_osc_params).Hamiltonian.toarray())[1]
 
         # set the initial condition
-        harmonic_osc.wavefunction = eigenstates[:,3] + 0j
+        harmonic_osc.set_wavefunction(eigenstates[:,3])
 
         plt.subplot(122)
         plt.title("Test 3: Time evolution of eigenstate obtained via central finite difference")

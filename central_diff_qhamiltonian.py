@@ -57,16 +57,8 @@ class CentralDiffQHamiltonian:
         :param n: order
         :return: a copy of numpy array containing eigenfunction
         """
-        # check whether the hamiltonian has been diagonalized
-        try:
-            self.eigenstates
-        except AttributeError:
-            # eigenstates have not been calculated so
-            # get real sorted energies and underlying wavefunctions
-            # using specialized function for Hermitian matrices
-            self.energies, self.eigenstates = linalg.eigh(self.Hamiltonian.toarray())
-
-        return np.copy(self.eigenstates[:,n].real)
+        self.diagonalize()
+        return self.eigenstates[n].copy()
 
     def get_energy(self, n):
         """
@@ -74,14 +66,38 @@ class CentralDiffQHamiltonian:
         :param n: order
         :return: real value
         """
+        self.diagonalize()
+        return self.energies[n]
+
+    def diagonalize(self):
+        """
+        Diagonalize the Hamiltonian if necessary
+        :return: self
+        """
         # check whether the hamiltonian has been diagonalized
         try:
+            self.eigenstates
             self.energies
         except AttributeError:
-            # eigenvalues have not been calculated so
+            # eigenstates have not been calculated so
+            # get real sorted energies and underlying wavefunctions
+            # using specialized function for Hermitian matrices
             self.energies, self.eigenstates = linalg.eigh(self.Hamiltonian.toarray())
 
-        return np.real(self.energies[n])
+            # extract real part of the energies
+            self.energies = np.real(self.energies)
+
+            # covert to the formal convenient for storage
+            self.eigenstates = np.ascontiguousarray(self.eigenstates.T.real)
+
+            # normalize each eigenvector
+            for psi in self.eigenstates:
+                psi /= linalg.norm(psi) * np.sqrt(self.dX)
+
+            # check that the ground state is not negative
+            np.abs(self.eigenstates[0], out=self.eigenstates[0])
+
+        return self
 
 ##############################################################################
 #

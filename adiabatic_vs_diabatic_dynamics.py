@@ -103,6 +103,16 @@ class DynamicVisualized:
         # ground_state = MUBQHamiltonian(V=V, **self.qsys_params).get_eigenstate(0)
         return ground_state
 
+    def empty_frame(self):
+        """
+        Reset make empty frame
+        :return:
+        """
+        lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
+        for L in lines:
+            L.set_data([], [])
+        return lines
+
     def __call__(self, frame_num):
         """
         Draw a new frame
@@ -134,7 +144,8 @@ class DynamicVisualized:
 
 fig = plt.gcf()
 visualizer = DynamicVisualized(fig)
-animation = FuncAnimation(fig, visualizer, frames=np.arange(100), repeat=True)
+animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
+                          init_func=visualizer.empty_frame, repeat=True, blit=True)
 plt.show()
 
 # Save animation into the file

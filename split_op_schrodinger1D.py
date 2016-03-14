@@ -142,7 +142,12 @@ class SplitOpSchrodinger1D:
         assert wavefunc.shape == self.X_range.shape,\
             "The grid size does not match with the wave function"
 
+        # make sure the wavefunction is stored as a complex array
         self.wavefunction = wavefunc + 0j
+
+        # normalize
+        self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
+
         return self
 
 ##############################################################################

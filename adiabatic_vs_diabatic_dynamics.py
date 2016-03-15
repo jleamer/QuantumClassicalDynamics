@@ -106,7 +106,7 @@ class DynamicVisualized:
     def empty_frame(self):
         """
         Reset make empty frame
-        :return:
+        :return: list of lines
         """
         lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
         for L in lines:
@@ -145,7 +145,7 @@ class DynamicVisualized:
 fig = plt.gcf()
 visualizer = DynamicVisualized(fig)
 animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
-                          init_func=visualizer.empty_frame, repeat=True, blit=True)
+                          init_func=visualizer.empty_frame, repeat=True, blit=True, interval=30)
 plt.show()
 
 # Save animation into the file

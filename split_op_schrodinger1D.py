@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
-import matplotlib.pyplot as plt # Plotting facility
 
 
 class SplitOpSchrodinger1D:
@@ -130,7 +129,7 @@ class SplitOpSchrodinger1D:
             return self._expK
         except AttributeError:
             # re-calculate the exponent
-            return np.exp(-self.dt*1j*self.K(self.X_range, t))
+            return np.exp(-self.dt*1j*self.K(self.P_range, t))
 
     def set_wavefunction(self, wavefunc):
         """
@@ -158,6 +157,9 @@ class SplitOpSchrodinger1D:
 
 if __name__ == '__main__':
 
+    # Plotting facility
+    import matplotlib.pyplot as plt
+
     # Use the documentation string for the developed class
     print(SplitOpSchrodinger1D.__doc__)
 
@@ -168,6 +170,7 @@ if __name__ == '__main__':
             X_gridDIM=512,
             X_amplitude=5.,
             dt=0.01,
+            t=0,
             V=lambda x: 0.5*(omega*x)**2,
             K=lambda p: 0.5*p**2
         )

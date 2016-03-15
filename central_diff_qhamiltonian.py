@@ -2,7 +2,6 @@ import numpy as np
 from scipy.sparse import diags # Construct a sparse matrix from diagonals
 #from scipy.sparse import linalg # Linear algebra for sparse matrix
 from scipy import linalg # Linear algebra for dense matrix
-import matplotlib.pyplot as plt # plotting facility
 
 
 class CentralDiffQHamiltonian:
@@ -106,6 +105,9 @@ class CentralDiffQHamiltonian:
 ##############################################################################
 
 if __name__ == '__main__':
+
+    # plotting facility
+    import matplotlib.pyplot as plt
 
     print("Central difference Hamiltonian")
 

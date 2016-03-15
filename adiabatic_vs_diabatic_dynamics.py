@@ -6,8 +6,12 @@ A physical system remains in its instantaneous eigenstate if a given perturbatio
 import functools
 import numpy as np
 
-import matplotlib
-matplotlib.use('TKAgg')
+import sys
+if sys.platform == 'darwin':
+        # only for MacOS
+        import matplotlib
+        matplotlib.use('TKAgg')
+
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation # tools for creating animation
 

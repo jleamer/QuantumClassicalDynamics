@@ -179,8 +179,13 @@ class SplitOpSchrodinger2D:
 if __name__ == '__main__':
 
     # load tools for creating animation
-    import matplotlib
-    matplotlib.use('TKAgg')
+    import sys
+
+    if sys.platform == 'darwin':
+        # only for MacOS
+        import matplotlib
+        matplotlib.use('TKAgg')
+
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
 
@@ -213,7 +218,7 @@ if __name__ == '__main__':
             extent=[self.quant_sys.X2.min(), self.quant_sys.X2.max(), self.quant_sys.X1.min(), self.quant_sys.X1.max()]
             self.img = ax.imshow([[]], extent=extent, origin='lower')
 
-            fig.colorbar(self.img)
+            self.fig.colorbar(self.img)
 
             ax.set_xlabel('$x_2$ (a.u.)')
             ax.set_ylabel('$x_1$ (a.u.)')

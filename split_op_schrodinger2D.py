@@ -16,6 +16,7 @@ class SplitOpSchrodinger2D:
             X1_amplitude, X2_amplitude - maximum value of the coordinates
             V(x1, x2) - potential energy (as a function) may depend on time
             K(p1, p2) - momentum dependent part of the hamiltonian (as a function) may depend on time
+            dt - time step
             t (optional) - initial value of time
         """
 
@@ -155,7 +156,7 @@ class SplitOpSchrodinger2D:
     def set_wavefunction(self, wavefunc):
         """
         Set the initial wave function
-        :param wavefunc: 1D numoy array contaning the wave function
+        :param wavefunc: 2D numoy array contaning the wave function
         :return: self
         """
         # perform the consistency checks
@@ -230,12 +231,12 @@ if __name__ == '__main__':
             :return:
             """
             self.quant_sys = SplitOpSchrodinger2D(
-                t = 0,
-                dt = 0.005,
-                X1_gridDIM = 256,
-                X1_amplitude = 5.,
-                X2_gridDIM = 256,
-                X2_amplitude = 5.,
+                t=0,
+                dt=0.005,
+                X1_gridDIM=256,
+                X1_amplitude=5.,
+                X2_gridDIM=256,
+                X2_amplitude=5.,
                 # kinetic energy part of the hamiltonian
                 K=lambda p1, p2: 0.5*(p1**2 + p2**2),
                 # potential energy part of the hamiltonian
@@ -248,10 +249,10 @@ if __name__ == '__main__':
             # set randomised initial condition
             self.quant_sys.set_wavefunction(
                 np.exp(
-                    # eandomized positions
+                    # randomized positions
                     -np.random.uniform(0.5, 3.)*(self.quant_sys.X1 + np.random.uniform(-2., 2.))**2
                     -np.random.uniform(0.5, 3.)*(self.quant_sys.X2 + np.random.uniform(-2., 2.))**2
-                    # randomized intial velocities
+                    # randomized initial velocities
                     -1j*np.random.uniform(-2., 2.)*self.quant_sys.X1
                     -1j*np.random.uniform(-2., 2.)*self.quant_sys.X2
                 )
@@ -294,7 +295,7 @@ if __name__ == '__main__':
             :param frame_num: current frame number
             :return: image objects
             """
-            # Pre-calculat the volume elements
+            # Pre-calculate the volume elements
             dX1dX2 = self.quant_sys.dX1 * self.quant_sys.dX2
             dP1dP2 = self.quant_sys.dP1 * self.quant_sys.dP2
 
@@ -360,7 +361,7 @@ if __name__ == '__main__':
 
     # generate time step grid
     dt = visualizer.quant_sys.dt
-    times = np.arange(dt, visualizer.quant_sys.t + dt, dt)
+    times = np.arange(dt, dt + dt*len(visualizer.average_X1), dt)
 
     plt.subplot(121)
     plt.title("The first Ehrenfest theorem verification")

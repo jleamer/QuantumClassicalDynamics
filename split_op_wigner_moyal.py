@@ -143,6 +143,9 @@ class SplitOpWignerMoyal:
         # p lambda  ->  p x
         self.wignerfunction = fft.irfft(self.wignerfunction, axis=1)
 
+        # increment current time
+        self.t += self.dt
+
         return self.wignerfunction
 
     def propagate(self, time_steps=1):
@@ -161,9 +164,6 @@ class SplitOpWignerMoyal:
 
             # normalization
             self.wignerfunction /= self.wignerfunction.sum() * dXdP
-
-            # increment current time
-            self.t += self.dt
 
         return self.wignerfunction
 

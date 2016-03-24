@@ -5,7 +5,7 @@ import numpy as np
 from numpy import fft
 
 
-class SplitOpBlochWigner:
+class SplitOpWignerBloch:
     """
     Find the Wigner function of the Maxwell-Gibbs canonical state [rho = exp(-H/kT)]
     by split-operator propagation of the Bloch equation in phase space.
@@ -84,8 +84,6 @@ class SplitOpBlochWigner:
                 # Changing self.dbeta so that num_beta_steps is an exact integer
                 self.num_beta_steps = round(self.num_beta_steps)
                 self.dbeta = 1. / (self.kT*self.num_beta_steps)
-
-                print("Warning: the value of dbeta was adjusted such that 1/kT = dbeta * (some integer)")
 
             self.num_beta_steps = int(self.num_beta_steps)
         else:
@@ -198,12 +196,12 @@ class SplitOpBlochWigner:
 
 if __name__ == '__main__':
 
-    print(SplitOpBlochWigner.__doc__)
+    print(SplitOpWignerBloch.__doc__)
 
     import matplotlib.pyplot as plt
 
     qsys_params = dict(
-        t=0,
+        t=0.,
         dt=0.005,
 
         X_gridDIM=256,
@@ -222,7 +220,7 @@ if __name__ == '__main__':
     )
 
     print("Calculating the Gibbs state...")
-    gibbs_state = SplitOpBlochWigner(**qsys_params).get_gibbs_state()
+    gibbs_state = SplitOpWignerBloch(**qsys_params).get_gibbs_state()
 
     # Propagate this state via the Wigner-Moyal equation
     from split_op_wigner_moyal import SplitOpWignerMoyal

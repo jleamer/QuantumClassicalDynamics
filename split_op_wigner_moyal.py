@@ -36,16 +36,14 @@ class SplitOpWignerMoyal:
         except AttributeError:
             raise AttributeError("Coordinate grid size (X_gridDIM) was not specified")
 
-        assert 2**int(np.log2(self.X_gridDIM)) == self.X_gridDIM, \
-            "Coordinate grid size (X_gridDIM) should be power of 2"
+        assert self.X_gridDIM % 2 == 0, "Coordinate grid size (X_gridDIM) must be even"
 
         try:
             self.P_gridDIM
         except AttributeError:
             raise AttributeError("Momentum grid size (P_gridDIM) was not specified")
 
-        assert 2**int(np.log2(self.P_gridDIM)) == self.P_gridDIM, \
-            "Momentum grid size (P_gridDIM) should be power of 2"
+        assert self.P_gridDIM % 2 == 0, "Momentum grid size (P_gridDIM) must be even"
 
         try:
             self.X_amplitude
@@ -88,8 +86,9 @@ class SplitOpWignerMoyal:
 
         # Lambda grid (variable conjugate to the coordinate)
         self.Lambda = fft.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
+
         # take only first half, as required by the real fft
-        self.Lambda = self.Lambda[:(1 + self.X_gridDIM/2)]
+        self.Lambda = self.Lambda[:(1 + self.X_gridDIM//2)]
         #
         self.Lambda = self.Lambda[np.newaxis, :]
 
@@ -99,8 +98,10 @@ class SplitOpWignerMoyal:
 
         # Theta grid (variable conjugate to the momentum)
         self.Theta = fft.fftfreq(self.P_gridDIM, self.dP/(2*np.pi))
+
         # take only first half, as required by the real fft
-        self.Theta = self.Theta[:(1 + self.P_gridDIM/2)]
+        self.Theta = self.Theta[:(1 + self.P_gridDIM//2)]
+        #
         self.Theta = self.Theta[:, np.newaxis]
 
         try:
@@ -123,6 +124,27 @@ class SplitOpWignerMoyal:
             # and caching is not possible
             pass
 
+    def single_step_propagation(self):
+        """
+        Perform single step propagation. The final Wigner function is not normalized.
+        :return: self.wignerfunction
+        """
+        # p x -> theta x
+        self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
+        self.wignerfunction *= self.get_expV(self.t)
+
+        # theta x  ->  p x
+        self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
+
+        # p x  ->  p lambda
+        self.wignerfunction = fft.rfft(self.wignerfunction, axis=1)
+        self.wignerfunction *= self.get_expK(self.t)
+
+        # p lambda  ->  p x
+        self.wignerfunction = fft.irfft(self.wignerfunction, axis=1)
+
+        return self.wignerfunction
+
     def propagate(self, time_steps=1):
         """
         Time propagate the Wigner function saved in self.wignerfunction
@@ -134,19 +156,8 @@ class SplitOpWignerMoyal:
 
         for _ in xrange(time_steps):
 
-            # p x -> theta x
-            self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
-            self.wignerfunction *= self.get_expV(self.t)
-
-            # theta x  ->  p x
-            self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
-
-            # p x  ->  p lambda
-            self.wignerfunction = fft.rfft(self.wignerfunction, axis=1)
-            self.wignerfunction *= self.get_expK(self.t)
-
-            # p lambda  ->  p x
-            self.wignerfunction = fft.irfft(self.wignerfunction, axis=1)
+            # advance by one time step
+            self.single_step_propagation()
 
             # normalization
             self.wignerfunction /= self.wignerfunction.sum() * dXdP
@@ -252,7 +263,8 @@ if __name__ == '__main__':
             from wigner_normalize import WignerNormalize
 
             # generate empty plot
-            self.img = ax.imshow([[]],
+            self.img = ax.imshow(
+                [[]],
                 extent=extent,
                 origin='lower',
                 cmap='seismic',

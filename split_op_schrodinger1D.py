@@ -6,6 +6,7 @@ from scipy import linalg # Linear algebra for dense matrix
 class SplitOpSchrodinger1D:
     """
     Split-operator propagator of the 1D Schrodinger equation
+    in the coordinate representation
     with the time-dependent Hamiltonian H = K(p, t) + V(x, t).
     (K and V may not depend on time)
     """
@@ -15,7 +16,9 @@ class SplitOpSchrodinger1D:
             X_gridDIM - specifying the grid size
             X_amplitude - maximum value of the coordinates
             V(x) - potential energy (as a function) may depend on time
+            diff_V(x) (optional) -- the derivative of the potential energy for the Ehrenfest theorem calculations
             K(p) - momentum dependent part of the hamiltonian (as a function) may depend on time
+            diff_K(p) (optional) -- the derivative of the kinetic energy for the Ehrenfest theorem calculations
             t (optional) - initial value of time
         """
 
@@ -83,6 +86,50 @@ class SplitOpSchrodinger1D:
             # and caching is not possible
             pass
 
+        # Check whether the necessary terms are specified to calculate the Ehrenfest theorems
+        try:
+            # Pre-calculate RHS if time independent
+            try:
+                self._diff_V = self.diff_V(self.X_range)
+            except TypeError:
+                pass
+
+            # Pre-calculate RHS if time independent
+            try:
+                self._diff_K = self.diff_K(self.P_range)
+            except TypeError:
+                pass
+
+            # Pre-calculate the potential and kinetic energies for
+            # calculating the expectation value of Hamiltonian
+            try:
+                self._V = self.V(self.X_range)
+            except TypeError:
+                pass
+            try:
+                self._K = self.K(self.P_range)
+            except TypeError:
+                pass
+
+            # Lists where the expectation values of X and P
+            self.X_average = []
+            self.P_average = []
+
+            # Lists where the right hand sides of the Ehrenfest theorems for X and P
+            self.X_average_RHS = []
+            self.P_average_RHS = []
+
+            # List where the expectation value of the Hamiltonian will be calculated
+            self.hamiltonian_average = []
+
+            # Flag requesting tha the Ehrenfest theorem calculations
+            self.isEhrenfest = True
+        except AttributeError:
+            # Since self.diff_V and self.diff_K are not specified,
+            # the Ehrenfest theorem will not be calculated
+            self.isEhrenfest = False
+
+
     def propagate(self, time_steps=1):
         """
         Time propagate the wave function saved in self.wavefunction
@@ -104,20 +151,61 @@ class SplitOpSchrodinger1D:
             # self.wavefunction /= np.sqrt(np.sum(np.abs(self.wavefunction)**2)*self.dX)
             self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
 
+            # calculate the Ehrenfest theorems
+            self.get_Ehrenfest(self.t)
+
             # increment current time
             self.t += self.dt
 
         return self.wavefunction
+
+    def get_Ehrenfest(self, t):
+        """
+        Calculate observables entering the Ehrenfest theorems at time (t)
+        """
+        if self.isEhrenfest:
+            # calculate the coordinate density
+            density_coord = np.abs(self.wavefunction)**2
+            # normalize
+            density_coord /= density_coord.sum()
+
+            # save the current value of <X>
+            self.X_average.append(
+                np.dot(density_coord, self.X_range)
+            )
+            self.P_average_RHS.append(
+                -np.dot(density_coord, self.get_diff_V(t))
+            )
+
+            # calculate density in the momentum representation
+            density_momentum = np.abs(fftpack.fft(self.wavefunction))**2
+            # normalize
+            density_momentum /= density_momentum.sum()
+
+            # save the current value of <P>
+            self.P_average.append(
+                np.dot(density_momentum, self.P_range)
+            )
+            self.X_average_RHS.append(
+                np.dot(density_momentum, self.get_diff_K(t))
+            )
+
+            # save the current expectation value of energy
+            self.hamiltonian_average.append(
+                np.dot(density_coord, self.get_V(t))
+                +
+                np.dot(density_momentum, self.get_K(t))
+            )
 
     def get_expV(self, t):
         """
         Return the exponent of the potential energy at time (t)
         """
         try:
-            # aces the pre-calculated value
+            # access the pre-calculated value
             return self._expV
         except AttributeError:
-            # re-calculate the exponent
+            # calculate the exponent
             return np.exp(-self.dt*1j*self.V(self.X_range, t))
 
     def get_expK(self, t):
@@ -125,11 +213,49 @@ class SplitOpSchrodinger1D:
         Return the exponent of the kinetic energy at time (t)
         """
         try:
-            # aces the pre-calculated value
+            # access the pre-calculated value
             return self._expK
         except AttributeError:
-            # re-calculate the exponent
+            # calculate the exponent
             return np.exp(-self.dt*1j*self.K(self.P_range, t))
+
+    def get_diff_V(self, t):
+        """
+        Return the RHS for the Ehrenfest theorem at time (t)
+        """
+        try:
+            # access the pre-calculated value
+            return self._diff_V
+        except AttributeError:
+            return self.diff_V(self.X_range, t)
+
+    def get_diff_K(self, t):
+        """
+        Return the RHS for the Ehrenfest theorem at time (t)
+        """
+        try:
+            # access the pre-calculated value
+            return self._diff_K
+        except AttributeError:
+            return self.diff_K(self.P_range, t)
+
+    def get_K(self, t):
+        """
+        Return the kinetic energy at time (t)
+        """
+        try:
+            return self._K
+        except AttributeError:
+            return self.K(self.P_range, t)
+
+    def get_V(self, t):
+        """
+        Return the potential energy at time (t)
+        """
+        try:
+            return self._V
+        except AttributeError:
+            return self.V(self.X_range, t)
 
     def set_wavefunction(self, wavefunc):
         """
@@ -170,9 +296,13 @@ if __name__ == '__main__':
             X_gridDIM=512,
             X_amplitude=5.,
             dt=0.01,
-            t=0,
+            t=0.,
+
             V=lambda x: 0.5*(omega*x)**2,
-            K=lambda p: 0.5*p**2
+            diff_V=lambda x: omega**2*x,
+
+            K=lambda p: 0.5*p**2,
+            diff_K=lambda p: p
         )
 
         ##################################################################################################
@@ -181,7 +311,9 @@ if __name__ == '__main__':
         harmonic_osc = SplitOpSchrodinger1D(**harmonic_osc_params)
 
         # set the initial condition
-        harmonic_osc.set_wavefunction(np.exp(-(harmonic_osc.X_range - 3.)**2))
+        harmonic_osc.set_wavefunction(
+            np.exp(-(harmonic_osc.X_range + 3.)**2)
+        )
 
         # get time duration of 6 periods
         T = 6* 2.*np.pi/omega
@@ -191,7 +323,6 @@ if __name__ == '__main__':
         # propagate till time T and for each time step save a probability density
         wavefunctions = [harmonic_osc.propagate().copy() for _ in xrange(time_steps)]
 
-        plt.subplot(121)
         plt.title("Test 1: Time evolution of harmonic oscillator with $\\omega$ = %.2f (a.u.)" % omega)
 
         # plot the time dependent density
@@ -203,36 +334,46 @@ if __name__ == '__main__':
         )
         plt.xlabel('coordinate $x$ (a.u.)')
         plt.ylabel('time $t$ (a.u.)')
+        plt.show()
 
         ##################################################################################################
 
-        plt.subplot(122)
+        plt.subplot(131)
         plt.title("Verify the first Ehrenfest theorem")
 
-        # to verify the first Ehrenfest theorem,
-        # calculate <X>(t) using the fact that the zero axis in wavefunctions corresponds to time
-        X_average = np.sum(
-            np.abs(wavefunctions)**2 * harmonic_osc.X_range[np.newaxis,:],
-            axis=1
-        ) * harmonic_osc.dX
-
-        # get the density in the momentum representation
-        density_p = np.abs(fftpack.fft(wavefunctions, axis=1))**2
-        # normalize it along the momentum axis
-        density_p /= np.sum(density_p, axis=1)[:, np.newaxis] * harmonic_osc.dP
-
-        # calculate <P>(t)
-        P_average = np.sum(
-            density_p * harmonic_osc.P_range[np.newaxis,:],
-            axis=1
-        ) * harmonic_osc.dP
-
-        times = harmonic_osc.dt * np.arange(time_steps)
-        plt.plot(times, np.gradient(X_average, harmonic_osc.dt), '-r', label='$d\\langle\\hat{x}\\rangle / dt$')
-        plt.plot(times, P_average, '--b', label='$\\langle\\hat{p}\\rangle$')
+        times = harmonic_osc.dt * np.arange(len(harmonic_osc.X_average))
+        plt.plot(
+            times,
+            np.gradient(harmonic_osc.X_average, harmonic_osc.dt),
+            '-r',
+            label='$d\\langle\\hat{x}\\rangle / dt$'
+        )
+        plt.plot(times, harmonic_osc.X_average_RHS, '--b', label='$\\langle\\hat{p}\\rangle$')
         plt.legend()
         plt.ylabel('momentum')
         plt.xlabel('time $t$ (a.u.)')
+
+        plt.subplot(132)
+        plt.title("Verify the second Ehrenfest theorem")
+
+        plt.plot(
+            times,
+            np.gradient(harmonic_osc.P_average, harmonic_osc.dt),
+            '-r',
+            label='$d\\langle\\hat{p}\\rangle / dt$'
+        )
+        plt.plot(times, harmonic_osc.P_average_RHS, '--b', label='$\\langle -U\'(\\hat{x})\\rangle$')
+        plt.legend()
+        plt.ylabel('force')
+        plt.xlabel('time $t$ (a.u.)')
+
+        plt.subplot(133)
+        plt.title("The expectation value of the hamiltonian")
+
+        plt.plot(times, harmonic_osc.hamiltonian_average)
+        plt.ylabel('energy')
+        plt.xlabel('time $t$ (a.u.)')
+
         plt.show()
 
         ##################################################################################################
@@ -285,4 +426,5 @@ if __name__ == '__main__':
         )
         plt.xlabel('coordinate $x$ (a.u.)')
         plt.ylabel('time $t$ (a.u.)')
+
         plt.show()

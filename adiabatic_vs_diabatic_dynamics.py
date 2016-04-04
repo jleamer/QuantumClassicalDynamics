@@ -149,7 +149,7 @@ class DynamicVisualized:
 fig = plt.gcf()
 visualizer = DynamicVisualized(fig)
 animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
-                          init_func=visualizer.empty_frame, repeat=True, blit=True, interval=30)
+                          init_func=visualizer.empty_frame, repeat=True, blit=True)
 plt.show()
 
 # Save animation into the file

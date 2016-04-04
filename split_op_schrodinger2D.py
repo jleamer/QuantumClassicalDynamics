@@ -345,7 +345,7 @@ if __name__ == '__main__':
     fig = plt.gcf()
     visualizer = VisualizeDynamics2D(fig)
     animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
-                              init_func=visualizer.empty_frame, repeat=True, blit=True, interval=100)
+                              init_func=visualizer.empty_frame, repeat=True, blit=True)
     plt.show()
 
     # Analyze how well the energy was preseved

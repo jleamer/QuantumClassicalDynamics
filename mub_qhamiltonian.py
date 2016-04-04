@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
-import matplotlib.pyplot as plt # Plotting facility
 
 
 class MUBQHamiltonian:
@@ -114,6 +113,8 @@ class MUBQHamiltonian:
 ##############################################################################
 
 if __name__ == '__main__':
+
+    import matplotlib.pyplot as plt # Plotting facility
 
     print("Hamiltonian via mutually unbiased bases (MUB)")
 

@@ -93,10 +93,6 @@ class Molecule2StateWignerMoyal:
 
         # Lambda grid (variable conjugate to the coordinate)
         self.Lambda = fft.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
-
-        # take only first half, as required by the real fft
-        #self.Lambda = self.Lambda[:(1 + self.X_gridDIM//2)]
-        #
         self.Lambda = self.Lambda[np.newaxis, :]
 
         # momentum grid
@@ -105,10 +101,6 @@ class Molecule2StateWignerMoyal:
 
         # Theta grid (variable conjugate to the momentum)
         self.Theta = fft.fftfreq(self.P_gridDIM, self.dP/(2*np.pi))
-
-        # take only first half, as required by the real fft
-        #self.Theta = self.Theta[:(1 + self.P_gridDIM//2)]
-        #
         self.Theta = self.Theta[:, np.newaxis]
 
         # Save shifted grids
@@ -128,23 +120,6 @@ class Molecule2StateWignerMoyal:
         self.expK = self.K(self.P - 0.5*self.Lambda) - self.K(self.P + 0.5*self.Lambda)
         self.expK = 1j*self.dt * self.expK
         np.exp(self.expK, out=self.expK)
-
-        """
-        try:
-            # Pre-calculate the coupling energy between ground and excited states, if time independent
-            self._Veg_x_plus = self.Veg(self.x_plus)
-            self._Veg_x_minus = self.Veg(self.x_minus)
-        except TypeError:
-            # If exception is generated, then the coupling is time-dependent
-            # and caching is not possible
-            pass
-
-    def get_Veg(self, x, t):
-        try:
-            return self._Veg_x_plus if x is self.x_plus else self._Veg_x_minus
-        except AttributeError:
-            return self.Veg(x, t)
-        """
 
     def get_CML(self, q, t):
         """
@@ -195,59 +170,64 @@ class Molecule2StateWignerMoyal:
         C, M, L = self.get_CML(self.x_plus, t)
         return C+1j*M, 1j*L, C-1j*M
 
+    def theta_slice(self, *args):
+        """
+        Slice array A listed in args as if they were returned by fft.rfft(A, axis=0)
+        """
+        return (A[:(1 + self.P_gridDIM//2), :] for A in args)
+
     def single_step_propagation(self):
         """
         Perform single step propagation. The final Wigner functions are not normalized.
         """
         ################ p x -> theta x ################
-        self.wigner_g = fftpack.fft(self.wigner_g, axis=0, overwrite_x=True)
         self.wigner_ge = fftpack.fft(self.wigner_ge, axis=0, overwrite_x=True)
+        self.wigner_g = fftpack.fft(self.wigner_g, axis=0, overwrite_x=True)
         self.wigner_e = fftpack.fft(self.wigner_e, axis=0, overwrite_x=True)
 
-        ################ Act with T matrix from the left ################
-        Tg, Tge, Te = self.get_T_left(self.t)
+        # Construct T matricies
+        TgL, TgeL, TeL = self.get_T_left(self.t)
+        TgR, TgeR, TeR = self.get_T_right(self.t)
 
         # Save previous version of the Wigner function
         Wg, Wge, We = self.wigner_g, self.wigner_ge, self.wigner_e
 
-        self.wigner_g = Tg * Wg + Tge * Wge.conj()
-        self.wigner_ge = Tg * Wge + Tge * We
-        self.wigner_e = Tge * Wge + Te * We
+        # First update the complex valued off diagonal wigner function
+        self.wigner_ge = (TgL*Wg + TgeL*Wge.conj())*TgeR + (TgL*Wge + TgeL*We)*TeR
 
-        ################ Act with T matrix from the right ################
-        Tg, Tge, Te = self.get_T_right(self.t)
+        # Slice arrays to employ the symmetry (savings in speed)
+        TgL, TgeL, TeL = self.theta_slice(TgL, TgeL, TeL)
+        TgR, TgeR, TeR = self.theta_slice(TgR, TgeR, TeR)
+        Wg, Wge, We = self.theta_slice(Wg, Wge, We)
 
-        # Save previous version of the Wigner function
-        Wg, Wge, We = self.wigner_g, self.wigner_ge, self.wigner_e
-
-        self.wigner_g = Tg * Wg + Tge * Wge
-        self.wigner_ge = Tge * Wg + Te * Wge
-        self.wigner_e = Tge * Wge.conj() + Te * We
+        # Calculate the remaning real valued Wigner functions
+        self.wigner_g = (TgL*Wg + TgeL*Wge.conj())*TgR + (TgL*Wge + TgeL*We)*TgeR
+        self.wigner_e = (TgeL*Wg + TeL*Wge.conj())*TgeR + (TgeL*Wge + TeL*We)*TeR
 
         ################ Apply the phase factor ################
-        self.wigner_g *= self.expV
         self.wigner_ge *= self.expV
-        self.wigner_e *= self.expV
+        self.wigner_g *= self.expV[:(1 + self.P_gridDIM//2), :]
+        self.wigner_e *= self.expV[:(1 + self.P_gridDIM//2), :]
 
         ################ theta x -> p x ################
-        self.wigner_g = fftpack.ifft(self.wigner_g, axis=0, overwrite_x=True)
         self.wigner_ge = fftpack.ifft(self.wigner_ge, axis=0, overwrite_x=True)
-        self.wigner_e = fftpack.ifft(self.wigner_e, axis=0, overwrite_x=True)
+        self.wigner_g = fft.irfft(self.wigner_g, axis=0)
+        self.wigner_e = fft.irfft(self.wigner_e, axis=0)
 
         ################ p x  ->  p lambda ################
-        self.wigner_g = fftpack.fft(self.wigner_g, axis=1, overwrite_x=True)
         self.wigner_ge = fftpack.fft(self.wigner_ge, axis=1, overwrite_x=True)
-        self.wigner_e = fftpack.fft(self.wigner_e, axis=1, overwrite_x=True)
+        self.wigner_g = fft.rfft(self.wigner_g, axis=1)
+        self.wigner_e = fft.rfft(self.wigner_e, axis=1)
 
         ################ Apply the phase factor ################
-        self.wigner_g *= self.expK
         self.wigner_ge *= self.expK
-        self.wigner_e *= self.expK
+        self.wigner_g *= self.expK[:, :(1 + self.X_gridDIM//2)]
+        self.wigner_e *= self.expK[:, :(1 + self.X_gridDIM//2)]
 
         ################ p lambda  ->  p x ################
-        self.wigner_g = fftpack.ifft(self.wigner_g, axis=1, overwrite_x=True)
         self.wigner_ge = fftpack.ifft(self.wigner_ge, axis=1, overwrite_x=True)
-        self.wigner_e = fftpack.ifft(self.wigner_e, axis=1, overwrite_x=True)
+        self.wigner_g = fft.irfft(self.wigner_g, axis=1)
+        self.wigner_e = fft.irfft(self.wigner_e, axis=1)
 
         #self.normalize_wigner_matrix()
 
@@ -268,33 +248,20 @@ class Molecule2StateWignerMoyal:
         :param new_wigner_func: 2D numoy array contaning the wigner function
         :return: self
         """
-        """
-        # perform the consistency checks
-        assert new_wigner_func.shape == (self.P.size, self.X.size), \
-            "The grid sizes does not match with the Wigner function"
+        current_shape = (self.P_gridDIM, self.X_gridDIM)
 
-        # make sure the Wigner function is stored as a complex array
-        self.wignerfunction = new_wigner_func + 0j
+        self.wigner_ge = (Wge if isinstance(Wge, np.ndarray) else np.zeros(current_shape, dtype=np.complex))
+        assert self.wigner_ge.shape == current_shape, "Wge has incorrect size"
 
-        # normalize
-        self.wignerfunction /= self.wignerfunction.sum() * self.dX*self.dP
-        """
+        self.wigner_g = (Wg if isinstance(Wg, np.ndarray) else np.zeros(current_shape, dtype=np.float))
+        assert self.wigner_g.shape == current_shape, "Wg has incorrect size"
 
-        self.wigner_g, self.wigner_ge, self.wigner_e = Wg, Wge, We
-
-        if not isinstance(Wg, np.ndarray):
-            self.wigner_g = np.zeros((self.P_gridDIM, self.X_gridDIM), dtype=np.complex)
-
-        if not isinstance(Wge, np.ndarray):
-            self.wigner_ge = np.zeros((self.P_gridDIM, self.X_gridDIM), dtype=np.complex)
-
-        if not isinstance(We, np.ndarray):
-            self.wigner_e = np.zeros((self.P_gridDIM, self.X_gridDIM), dtype=np.complex)
+        self.wigner_e = (We if isinstance(We, np.ndarray) else np.zeros(current_shape, dtype=np.float))
+        assert self.wigner_e.shape == current_shape, "We has incorrect size"
 
         self.normalize_wigner_matrix()
 
         return self
-
 
 ##############################################################################
 #
@@ -390,8 +357,8 @@ if __name__ == '__main__':
                 # kinetic energy part of the hamiltonian
                 K=lambda p: 0.5*p**2,
                 # potential energy part of the hamiltonian
-                Vg=lambda x: 0.5*2.9*x**2, #+ 0.00001*x**4,
-                Ve=lambda x: 0.5*1*x**2,
+                Vg=lambda x: 0.5*2*x**2, #+ 0.00001*x**4,
+                Ve=lambda x: 0.5*3*(x-1)**2,
                 Veg=lambda x,t: 0.1*x
             )
 
@@ -420,13 +387,13 @@ if __name__ == '__main__':
             :param frame_num: current frame number
             :return: image objects
             """
-            for _ in xrange(10):
+            for _ in xrange(20):
                 self.molecule.single_step_propagation()
 
-            self.wigner_g_img.set_array(self.molecule.wigner_g.real)
+            self.wigner_g_img.set_array(self.molecule.wigner_g)
             self.re_wigner_ge_img.set_array(self.molecule.wigner_ge.real)
             self.im_wigner_ge_img.set_array(self.molecule.wigner_ge.imag)
-            self.wigner_e_img.set_array(self.molecule.wigner_e.real)
+            self.wigner_e_img.set_array(self.molecule.wigner_e)
 
             return self.wigner_g_img, self.re_wigner_ge_img, self.im_wigner_ge_img, self.wigner_e_img
 

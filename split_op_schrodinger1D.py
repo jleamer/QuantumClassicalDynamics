@@ -5,7 +5,7 @@ from scipy import linalg # Linear algebra for dense matrix
 
 class SplitOpSchrodinger1D:
     """
-    Split-operator propagator of the 1D Schrodinger equation
+    The second-order split-operator propagator of the 1D Schrodinger equation
     in the coordinate representation
     with the time-dependent Hamiltonian H = K(p, t) + V(x, t).
     (K and V may not depend on time)
@@ -72,7 +72,7 @@ class SplitOpSchrodinger1D:
 
         try:
             # Pre-calculate the exponent, if the potential is time independent
-            self._expV = np.exp(-self.dt*1j*self.V(self.X_range))
+            self._expV = np.exp(-self.dt*0.5j*self.V(self.X_range))
         except TypeError:
             # If exception is generated, then the potential is time-dependent
             # and caching is not possible
@@ -137,7 +137,9 @@ class SplitOpSchrodinger1D:
         :return: self.wavefunction
         """
         for _ in xrange(time_steps):
-            self.wavefunction *= self.get_expV(self.t)
+
+            expV = self.get_expV(self.t)
+            self.wavefunction *= expV
 
             # going to the momentum representation
             self.wavefunction = fftpack.fft(self.wavefunction, overwrite_x=True)
@@ -145,6 +147,7 @@ class SplitOpSchrodinger1D:
 
             # going back to the coordinate representation
             self.wavefunction = fftpack.ifft(self.wavefunction, overwrite_x=True)
+            self.wavefunction *= expV
 
             # normalize
             # this line is equivalent to
@@ -206,7 +209,7 @@ class SplitOpSchrodinger1D:
             return self._expV
         except AttributeError:
             # calculate the exponent
-            return np.exp(-self.dt*1j*self.V(self.X_range, t))
+            return np.exp(-self.dt*0.5j*self.V(self.X_range, t))
 
     def get_expK(self, t):
         """

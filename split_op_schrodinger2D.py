@@ -5,7 +5,7 @@ from scipy import linalg # Linear algebra for dense matrix
 
 class SplitOpSchrodinger2D:
     """
-    Split-operator propagator of the 2D Schrodinger equation in the coordinate representation
+    The second-order split-operator propagator of the 2D Schrodinger equation in the coordinate representation
     with the time-dependent Hamiltonian H = K(p1, p2, t) + V(x1, x2, t).
     (K and V may not depend on time)
     """
@@ -93,7 +93,7 @@ class SplitOpSchrodinger2D:
 
         try:
             # Pre-calculate the exponent, if the potential is time independent
-            self._expV = np.exp(-self.dt*1j*self.V(self.X1, self.X2))
+            self._expV = np.exp(-self.dt*0.5j*self.V(self.X1, self.X2))
         except TypeError:
             # If exception is generated, then the potential is time-dependent
             # and caching is not possible
@@ -171,7 +171,9 @@ class SplitOpSchrodinger2D:
         sqrtdX1dX2 = np.sqrt(self.dX1 * self.dX2)
 
         for _ in xrange(time_steps):
-            self.wavefunction *= self.get_expV(self.t)
+
+            expV = self.get_expV(self.t)
+            self.wavefunction *= expV
 
             # going to the momentum representation
             self.wavefunction = fftpack.fft2(self.wavefunction, overwrite_x=True)
@@ -179,6 +181,7 @@ class SplitOpSchrodinger2D:
 
             # going back to the coordinate representation
             self.wavefunction = fftpack.ifft2(self.wavefunction, overwrite_x=True)
+            self.wavefunction *= expV
 
             # normalize
             # this line is equivalent to
@@ -254,7 +257,7 @@ class SplitOpSchrodinger2D:
         except AttributeError:
             # Calculate result = np.exp(-self.dt*1j * self.V(self.X1, self.X2, t))
             # in efficient way
-            result = -self.dt*1j*self.V(self.X1, self.X2, t)
+            result = -self.dt*0.5j*self.V(self.X1, self.X2, t)
             return np.exp(result, out=result)
 
     def get_expK(self, t):

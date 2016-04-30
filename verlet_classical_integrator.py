@@ -284,8 +284,8 @@ if __name__ == '__main__':
 
     # Set initial conditions
     sys.set_ensemble(
-        X=np.random.uniform(-1.5, 1.5, (3, 10)),
-        P=np.random.uniform(-1.5, 1.5, (3, 10))
+        X=np.random.uniform(-1., 1., (3, 10)),
+        P=np.random.uniform(-1., 1., (3, 10))
     )
 
     # propagate
@@ -337,7 +337,7 @@ if __name__ == '__main__':
         times,
         np.array(sys.P_average_RHS)[:,0],
         '--b',
-        label='$\\langle -U\'_{x_1} (x_1, x_2)\\rangle$'
+        label='$\\langle -U\'_{x_1} (x_1, x_2, x_3)\\rangle$'
     )
     plt.legend()
     plt.ylabel('force')

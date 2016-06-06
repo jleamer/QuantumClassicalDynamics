@@ -227,10 +227,12 @@ class SplitOpWignerMoyal:
     def get_Ehrenfest(self, t):
         """
         Calculate observables entering the Ehrenfest theorems at time (t)
+        :param t: time
+        :return: coordinate and momentum marginals of the Wigner function
         """
         if self.isEhrenfest:
             # calculate the coordinate density
-            density_coord = self.wignerfunction.real.sum(axis=0)
+            density_coord = self.wignerfunction.sum(axis=0)
             # normalize
             density_coord /= density_coord.sum()
 
@@ -243,7 +245,7 @@ class SplitOpWignerMoyal:
             )
 
             # calculate density in the momentum representation
-            density_momentum = self.wignerfunction.real.sum(axis=1)
+            density_momentum = self.wignerfunction.sum(axis=1)
             # normalize
             density_momentum /= density_momentum.sum()
 
@@ -261,6 +263,8 @@ class SplitOpWignerMoyal:
                 +
                 np.dot(density_coord, self.get_V(t).reshape(-1))
             )
+
+            return density_coord, density_momentum
 
     def get_expV(self, t):
         """

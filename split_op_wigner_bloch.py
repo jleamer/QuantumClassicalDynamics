@@ -7,7 +7,8 @@ from numpy import fft
 
 class SplitOpWignerBloch:
     """
-    Find the Wigner function of the Maxwell-Gibbs canonical state [rho = exp(-H/kT)]
+    The second-order split-operator propagator for
+    finding the Wigner function of the Maxwell-Gibbs canonical state [rho = exp(-H/kT)]
     by split-operator propagation of the Bloch equation in phase space.
     The Hamiltonian should be of the form H = K(p) + V(x).
 
@@ -80,7 +81,7 @@ class SplitOpWignerBloch:
             # get number of dbeta steps to reach the desired Gibbs state
             self.num_beta_steps = 1. / (self.kT*self.dbeta)
 
-            if round(self.num_beta_steps) <> self.num_beta_steps:
+            if round(self.num_beta_steps) != self.num_beta_steps:
                 # Changing self.dbeta so that num_beta_steps is an exact integer
                 self.num_beta_steps = round(self.num_beta_steps)
                 self.dbeta = 1. / (self.kT*self.num_beta_steps)
@@ -131,7 +132,7 @@ class SplitOpWignerBloch:
 
         # Get the sum of the potential energy contributions
         self.expV = self.V(self.X - 0.5*self.Theta) + self.V(self.X + 0.5*self.Theta)
-        self.expV *= -0.5*self.dbeta
+        self.expV *= -0.25*self.dbeta
 
         # Make sure that the largest value is zero
         self.expV -= self.expV.max()
@@ -165,6 +166,13 @@ class SplitOpWignerBloch:
 
         # p lambda  ->  p x
         self.wignerfunction = fft.irfft(self.wignerfunction, axis=1)
+
+        # p x -> theta x
+        self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
+        self.wignerfunction *= self.expV
+
+        # theta x  ->  p x
+        self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
 
         return self.wignerfunction
 
@@ -205,18 +213,18 @@ if __name__ == '__main__':
         dt=0.005,
 
         X_gridDIM=256,
-        X_amplitude=6.,
+        X_amplitude=10.,
 
         P_gridDIM=256,
-        P_amplitude=9.,
+        P_amplitude=10.,
 
-        kT=0.1,
+        kT=0.7,
 
         # kinetic energy part of the hamiltonian
         K=lambda p: 0.5*p**2,
 
         # potential energy part of the hamiltonian
-        V=lambda x: 0.5*x**4
+        V=lambda x: 0.5*x**4,
     )
 
     print("Calculating the Gibbs state...")

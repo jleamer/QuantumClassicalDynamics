@@ -2,6 +2,7 @@ import numpy as np
 from scipy.sparse import diags # Construct a sparse matrix from diagonals
 #from scipy.sparse import linalg # Linear algebra for sparse matrix
 from scipy import linalg # Linear algebra for dense matrix
+from types import MethodType, FunctionType
 
 
 class CentralDiffQHamiltonian:
@@ -9,17 +10,22 @@ class CentralDiffQHamiltonian:
     Generate quantum Hamiltonian for 1D system in the coordinate representation
     using the central difference approximation.
     """
-    def __init__(self, **kwards):
+    def __init__(self, **kwargs):
         """
-        The following parameters must be specified
-            X_gridDIM - specifying the grid size
-            X_amplitude - maximum value of the coordinates
-            V(x) - potential energy (as a function)
-        """
+         The following parameters must be specified
+             X_gridDIM - the grid size
+             X_amplitude - the maximum value of the coordinates
+             V(x) - a potential energy (as a function)
+         """
 
         # save all attributes
-        for name, value in kwards.items():
-            setattr(self, name, value)
+        for name, value in kwargs.items():
+            # if the value supplied is a function, then dynamically assign it as a method;
+            # otherwise bind it a property
+            if isinstance(value, FunctionType):
+                setattr(self, name, MethodType(value, self, self.__class__))
+            else:
+                setattr(self, name, value)
 
         # Check that all attributes were specified
         try:
@@ -93,7 +99,7 @@ class CentralDiffQHamiltonian:
             for psi in self.eigenstates:
                 psi /= linalg.norm(psi) * np.sqrt(self.dX)
 
-            # check that the ground state is not negative
+            # check that the ground state is non negative
             np.abs(self.eigenstates[0], out=self.eigenstates[0])
 
         return self
@@ -109,14 +115,15 @@ if __name__ == '__main__':
     # plotting facility
     import matplotlib.pyplot as plt
 
-    print("Central difference Hamiltonian")
+    print(CentralDiffQHamiltonian.__doc__)
 
     for omega in [4., 8.]:
         # Find energies of a harmonic oscillator V = 0.5*(omega*x)**2
         harmonic_osc = CentralDiffQHamiltonian(
                             X_gridDIM=512,
                             X_amplitude=5.,
-                            V=lambda x: 0.5*(omega*x)**2
+                            omega=omega,
+                            V=lambda self, x: 0.5 * (self.omega * x) ** 2
                         )
 
         # plot eigenfunctions

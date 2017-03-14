@@ -55,16 +55,21 @@ plt.ylabel('$\\exp(-\\alpha x^2)$')
 #
 ############################################################################
 
-FT_incorrect = fftpack.fftshift(fftpack.fft(f, overwrite_x=True))
+# Note that you may often see fftpack.fftshift used in this context
+
+FT_incorrect = fftpack.fft(f, overwrite_x=True)
+
 # get the corresponding momentum grid
-P = fftpack.fftshift(fftpack.fftfreq(X_gridDIM, dX / (2. * np.pi)))
+P = fftpack.fftfreq(X_gridDIM, dX / (2. * np.pi))
 
 plt.subplot(222)
 plt.title("Incorrect method")
+
 plt.plot(P, FT_incorrect.real, label='real FFT')
 plt.plot(P, FT_incorrect.imag, label='imag FFT')
 plt.plot(P, FT_exact(P).real, label='real exact')
 plt.plot(P, FT_exact(P).imag, label='imag exact')
+
 plt.legend()
 plt.xlabel('$p$')
 

@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
+from types import MethodType, FunctionType
 
 
 class MUBQHamiltonian:
@@ -8,7 +9,7 @@ class MUBQHamiltonian:
     Generate quantum Hamiltonian, H(x,p) = K(p) + V(x),
     for 1D system in the coordinate representation using mutually unbiased bases (MUB).
     """
-    def __init__(self, **kwards):
+    def __init__(self, **kwargs):
         """
         The following parameters must be specified
             X_gridDIM - specifying the grid size
@@ -18,12 +19,19 @@ class MUBQHamiltonian:
         """
 
         # save all attributes
-        for name, value in kwards.items():
-            setattr(self, name, value)
+        for name, value in kwargs.items():
+            # if the value supplied is a function, then dynamically assign it as a method;
+            # otherwise bind it a property
+            if isinstance(value, FunctionType):
+                setattr(self, name, MethodType(value, self, self.__class__))
+            else:
+                setattr(self, name, value)
 
         # Check that all attributes were specified
         try:
-            self.X_gridDIM
+            # make sure self.X_amplitude has a value of power of 2
+            assert 2 ** int(np.log2(self.X_gridDIM)) == self.X_gridDIM, \
+                "A value of the grid size (X_gridDIM) must be a power of 2"
         except AttributeError:
             raise AttributeError("Grid size (X_gridDIM) was not specified")
 
@@ -43,17 +51,26 @@ class MUBQHamiltonian:
             raise AttributeError("Momentum dependence (K) was not specified")
 
         # get coordinate step size
-        self.dX = 2.*self.X_amplitude / self.X_gridDIM
+        self.dX = 2. * self.X_amplitude / self.X_gridDIM
 
         # generate coordinate range
-        self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
+        k = np.arange(self.X_gridDIM)
+        self.X_range = (k - self.X_gridDIM / 2) * self.dX
+        # The same as
+        # self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
 
         # generate momentum range as it corresponds to FFT frequencies
-        self.P_range = fftpack.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
+        self.P_range = (k - self.X_gridDIM / 2) * (np.pi / self.X_amplitude)
+
+        # 2D array of alternating signs
+        minus = (-1) ** (k[:, np.newaxis] + k[np.newaxis, :])
 
         # Construct the momentum dependent part
-        self.Hamiltonian = fftpack.fft(np.diag(self.K(self.P_range)), axis=1, overwrite_x=True)
+        self.Hamiltonian = np.diag(self.K(self.P_range))
+        self.Hamiltonian *= minus
+        self.Hamiltonian = fftpack.fft(self.Hamiltonian, axis=1, overwrite_x=True)
         self.Hamiltonian = fftpack.ifft(self.Hamiltonian, axis=0, overwrite_x=True)
+        self.Hamiltonian *= minus
 
         # Add diagonal potential energy
         self.Hamiltonian += np.diag(self.V(self.X_range))
@@ -116,15 +133,16 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt # Plotting facility
 
-    print("Hamiltonian via mutually unbiased bases (MUB)")
+    print(MUBQHamiltonian.__doc__)
 
     for omega in [4., 8.]:
         # Find energies of a harmonic oscillator V = 0.5*(omega*x)**2
         harmonic_osc = MUBQHamiltonian(
                             X_gridDIM=512,
                             X_amplitude=5.,
-                            V=lambda x: 0.5*(omega*x)**2,
-                            K=lambda p: 0.5*p**2
+                            omega=omega,
+                            V=lambda self, x: 0.5 * (self.omega * x) ** 2,
+                            K=lambda self, p: 0.5 * p ** 2
                         )
 
         # plot eigenfunctions

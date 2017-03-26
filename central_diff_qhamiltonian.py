@@ -1,4 +1,5 @@
 import numpy as np
+import numexpr as ne
 from scipy.sparse import diags # Construct a sparse matrix from diagonals
 #from scipy.sparse import linalg # Linear algebra for sparse matrix
 from scipy import linalg # Linear algebra for dense matrix
@@ -15,7 +16,7 @@ class CentralDiffQHamiltonian:
          The following parameters must be specified
              X_gridDIM - the grid size
              X_amplitude - the maximum value of the coordinates
-             V(x) - a potential energy (as a function)
+             V - a potential energy (as a string to be evaluated by numexpr)
          """
 
         # save all attributes
@@ -43,18 +44,21 @@ class CentralDiffQHamiltonian:
         except AttributeError:
             raise AttributeError("Potential energy (V) was not specified")
 
-        # generate coordinate range
-        self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude, self.X_gridDIM)
+        # get coordinate step size
+        self.dX = 2. * self.X_amplitude / self.X_gridDIM
 
-        # save the coordinate step size
-        self.dX = self.X_range[1] - self.X_range[0]
+        # generate coordinate range
+        k = np.arange(self.X_gridDIM)
+        self.X = (k - self.X_gridDIM / 2) * self.dX
+        # Note that self.X is generate to be compatible with mub_qhamiltonian.py
 
         # Construct the kinetic energy part as sparse matrix from diagonal
         self.Hamiltonian = diags([1., -2., 1.], [-1, 0, 1], shape=(self.X_gridDIM, self.X_gridDIM))
         self.Hamiltonian *= -0.5/(self.dX**2)
 
         # Add diagonal potential energy
-        self.Hamiltonian = self.Hamiltonian + diags(self.V(self.X_range), 0)
+        V = ne.evaluate(self.V, local_dict=self.__dict__)
+        self.Hamiltonian = self.Hamiltonian + diags(V, 0)
 
     def get_eigenstate(self, n):
         """
@@ -123,12 +127,12 @@ if __name__ == '__main__':
                             X_gridDIM=512,
                             X_amplitude=5.,
                             omega=omega,
-                            V=lambda self, x: 0.5 * (self.omega * x) ** 2
+                            V="0.5 * (omega * X) ** 2",
                         )
 
         # plot eigenfunctions
         for n in range(4):
-            plt.plot(harmonic_osc.X_range, harmonic_osc.get_eigenstate(n), label=str(n))
+            plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n), label=str(n))
 
         print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
         print(harmonic_osc.energies[:20])

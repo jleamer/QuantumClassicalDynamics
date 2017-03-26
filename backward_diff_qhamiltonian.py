@@ -1,4 +1,5 @@
 import numpy as np
+import numexpr as ne
 from scipy.sparse import diags # Construct a sparse matrix from diagonals
 # from scipy.sparse import linalg # Linear algebra for sparse matrix
 from scipy import linalg # Linear algebra for dense matrix
@@ -15,7 +16,7 @@ class BackwardDiffQHamiltonian:
          The following parameters must be specified
              X_gridDIM - the grid size
              X_amplitude - the maximum value of the coordinates
-             V(x) - a potential energy (as a function)
+             V - a potential energy (as a string to be evaluated by numexpr)
          """
 
         # save all attributes
@@ -44,17 +45,18 @@ class BackwardDiffQHamiltonian:
             raise AttributeError("Potential energy (V) was not specified")
 
         # generate coordinate range
-        self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude, self.X_gridDIM)
+        self.X = np.linspace(-self.X_amplitude, self.X_amplitude, self.X_gridDIM)
 
         # save the coordinate step size
-        self.dX = self.X_range[1] - self.X_range[0]
+        self.dX = self.X[1] - self.X[0]
 
         # Construct the kinetic energy part as sparse matrix from diagonal
         self.Hamiltonian = diags([1., -2., 1.], [-2, -1, 0], shape=(self.X_gridDIM, self.X_gridDIM))
-        self.Hamiltonian *= -0.5/(self.dX**2)
+        self.Hamiltonian *= -0.5 / (self.dX ** 2)
 
         # Add diagonal potential energy
-        self.Hamiltonian = self.Hamiltonian + diags(self.V(self.X_range), 0)
+        V = ne.evaluate(self.V, local_dict=self.__dict__)
+        self.Hamiltonian = self.Hamiltonian + diags(V, 0)
 
 ##############################################################################
 #
@@ -72,7 +74,7 @@ if __name__ == '__main__':
                             X_gridDIM=512,
                             X_amplitude=5.,
                             omega=omega,
-                            V=lambda self, x: 0.5 * (self.omega * x) ** 2
+                            V="0.5 * (omega * X) ** 2",
                         )
         # get energies
         energies = linalg.eigvals(harmonic_osc.Hamiltonian.toarray())

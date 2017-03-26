@@ -1,4 +1,5 @@
 import numpy as np
+import numexpr as ne
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
 from types import MethodType, FunctionType
@@ -14,8 +15,8 @@ class MUBQHamiltonian:
         The following parameters must be specified
             X_gridDIM - specifying the grid size
             X_amplitude - maximum value of the coordinates
-            V(x) - potential energy (as a function)
-            K(p) - momentum dependent part of the hamiltonian (as a function)
+            V - potential energy (as a string to be evaluated by numexpr)
+            K - momentum dependent part of the hamiltonian (as a string to be evaluated by numexpr)
         """
 
         # save all attributes
@@ -55,25 +56,29 @@ class MUBQHamiltonian:
 
         # generate coordinate range
         k = np.arange(self.X_gridDIM)
-        self.X_range = (k - self.X_gridDIM / 2) * self.dX
+        self.X = (k - self.X_gridDIM / 2) * self.dX
         # The same as
-        # self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
+        # self.X = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
 
         # generate momentum range as it corresponds to FFT frequencies
-        self.P_range = (k - self.X_gridDIM / 2) * (np.pi / self.X_amplitude)
+        self.P = (k - self.X_gridDIM / 2) * (np.pi / self.X_amplitude)
 
         # 2D array of alternating signs
         minus = (-1) ** (k[:, np.newaxis] + k[np.newaxis, :])
 
         # Construct the momentum dependent part
-        self.Hamiltonian = np.diag(self.K(self.P_range))
+        self.Hamiltonian = np.diag(
+            ne.evaluate(self.K, local_dict=self.__dict__)
+        )
         self.Hamiltonian *= minus
         self.Hamiltonian = fftpack.fft(self.Hamiltonian, axis=1, overwrite_x=True)
         self.Hamiltonian = fftpack.ifft(self.Hamiltonian, axis=0, overwrite_x=True)
         self.Hamiltonian *= minus
 
         # Add diagonal potential energy
-        self.Hamiltonian += np.diag(self.V(self.X_range))
+        self.Hamiltonian += np.diag(
+            ne.evaluate(self.V, local_dict=self.__dict__)
+        )
 
     def get_eigenstate(self, n):
         """
@@ -141,13 +146,13 @@ if __name__ == '__main__':
                             X_gridDIM=512,
                             X_amplitude=5.,
                             omega=omega,
-                            V=lambda self, x: 0.5 * (self.omega * x) ** 2,
-                            K=lambda self, p: 0.5 * p ** 2
+                            V="0.5 * (omega * X) ** 2",
+                            K="0.5 * P ** 2",
                         )
 
         # plot eigenfunctions
         for n in range(4):
-            plt.plot(harmonic_osc.X_range, harmonic_osc.get_eigenstate(n), label=str(n))
+            plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n), label=str(n))
 
         print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
         print(harmonic_osc.energies[:20])

@@ -27,7 +27,7 @@ X = (k - X_gridDIM / 2) * dX
 
 ############################################################################
 #
-#   plot the exact results
+#   plot the original
 #
 ############################################################################
 
@@ -75,27 +75,77 @@ plt.xlabel('$p$')
 
 ############################################################################
 #
-#   correct method: Use the first method from
+#   correct method : Use the first method from
 #   http://epubs.siam.org/doi/abs/10.1137/0915067
 #
 ############################################################################
 minus = (-1) ** k
-FT_approx = dX * minus * fftpack.fft(minus * f, overwrite_x=True)
+FT_approx1 = dX * minus * fftpack.fft(minus * f, overwrite_x=True)
 
 # get the corresponding momentum grid
 P = (k - X_gridDIM / 2) * (np.pi / X_amplitude)
 
 plt.subplot(223)
-plt.title("Correct method #1")
-plt.plot(P, FT_approx.real, label='real approximate')
-plt.plot(P, FT_approx.imag, label='imag approximate')
+plt.title("Correct method #1 (using FFT)")
+plt.plot(P, FT_approx1.real, label='real approximate')
+plt.plot(P, FT_approx1.imag, label='imag approximate')
+plt.plot(P, FT_exact(P).real, label='real exact')
+plt.plot(P, FT_exact(P).imag, label='imag exact')
+plt.legend()
+plt.xlabel('$p$')
+
+############################################################################
+#
+#   correct method : Use the second method from
+#   http://epubs.siam.org/doi/abs/10.1137/0915067
+#
+############################################################################
+
+def frft(x, alpha):
+    """
+    Implementation of the Fractional Fourier Transform (FRFT)
+    :param x: array of data to be transformed
+    :param alpha: parameter of FRFT
+    :return: FRFT(x)
+    """
+    k = np.arange(x.size)
+
+    y = np.hstack([
+        x * np.exp(-np.pi * 1j * k**2 * alpha),
+        np.zeros(x.size, dtype=np.complex)
+    ])
+    z = np.hstack([
+        np.exp(np.pi * 1j * k**2 * alpha),
+        np.exp(np.pi * 1j * (k - x.size)**2 * alpha)
+    ])
+
+    G =  fftpack.ifft(
+        fftpack.fft(y, overwrite_x=True) * fftpack.fft(z, overwrite_x=True),
+        overwrite_x=True
+    )
+
+    return np.exp(-np.pi * 1j * k**2 * alpha) * G[:x.size]
+
+# generate the desired momentum grid
+P_amplitude = 3. * alpha
+dP = 2. * P_amplitude / X_gridDIM
+P = (k - X_gridDIM / 2) * dP
+
+delta = dX * dP / (2. * np.pi)
+
+FT_approx2 = dX * np.exp(np.pi * 1j * (k - X_gridDIM / 2) * X_gridDIM * delta) * \
+             frft(f * np.exp(np.pi * 1j * k * X_gridDIM * delta), delta)
+
+plt.subplot(224)
+plt.title("Correct method #2 (using FRFT)")
+plt.plot(P, FT_approx2.real, label='real approximate')
+plt.plot(P, FT_approx2.imag, label='imag approximate')
 plt.plot(P, FT_exact(P).real, label='real exact')
 plt.plot(P, FT_exact(P).imag, label='imag exact')
 plt.legend()
 plt.xlabel('$p$')
 
 plt.show()
-
 
 
 

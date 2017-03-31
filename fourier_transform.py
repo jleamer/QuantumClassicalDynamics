@@ -57,7 +57,7 @@ plt.ylabel('$\\exp(-\\alpha x^2)$')
 
 # Note that you may often see fftpack.fftshift used in this context
 
-FT_incorrect = fftpack.fft(f, overwrite_x=True)
+FT_incorrect = fftpack.fft(f)
 
 # get the corresponding momentum grid
 P = fftpack.fftfreq(X_gridDIM, dX / (2. * np.pi))

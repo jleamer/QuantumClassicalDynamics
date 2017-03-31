@@ -1,6 +1,8 @@
 import numpy as np
+import numexpr as ne
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
+from types import MethodType, FunctionType
 
 
 class SplitOpSchrodinger1D:
@@ -8,27 +10,33 @@ class SplitOpSchrodinger1D:
     The second-order split-operator propagator of the 1D Schrodinger equation
     in the coordinate representation
     with the time-dependent Hamiltonian H = K(p, t) + V(x, t).
-    (K and V may not depend on time)
     """
     def __init__(self, **kwargs):
         """
         The following parameters must be specified
             X_gridDIM - specifying the grid size
             X_amplitude - maximum value of the coordinates
-            V(x) - potential energy (as a function) may depend on time
-            diff_V(x) (optional) -- the derivative of the potential energy for the Ehrenfest theorem calculations
-            K(p) - momentum dependent part of the hamiltonian (as a function) may depend on time
-            diff_K(p) (optional) -- the derivative of the kinetic energy for the Ehrenfest theorem calculations
+            V - potential energy (as a string to be evaluated by numexpr)
+            K - momentum dependent part of the hamiltonian (as a string to be evaluated by numexpr)
+            diff_V (optional) -- the derivative of the potential energy for the Ehrenfest theorem calculations
+            diff_K (optional) -- the derivative of the kinetic energy for the Ehrenfest theorem calculations
             t (optional) - initial value of time
         """
 
         # save all attributes
         for name, value in kwargs.items():
-            setattr(self, name, value)
+            # if the value supplied is a function, then dynamically assign it as a method;
+            # otherwise bind it a property
+            if isinstance(value, FunctionType):
+                setattr(self, name, MethodType(value, self, self.__class__))
+            else:
+                setattr(self, name, value)
 
         # Check that all attributes were specified
         try:
-            self.X_gridDIM
+            # make sure self.X_amplitude has a value of power of 2
+            assert 2 ** int(np.log2(self.X_gridDIM)) == self.X_gridDIM, \
+                "A value of the grid size (X_gridDIM) must be a power of 2"
         except AttributeError:
             raise AttributeError("Grid size (X_gridDIM) was not specified")
 
@@ -59,57 +67,34 @@ class SplitOpSchrodinger1D:
             self.t = 0.
 
         # get coordinate step size
-        self.dX = 2.*self.X_amplitude / self.X_gridDIM
+        self.dX = 2. * self.X_amplitude / self.X_gridDIM
 
         # generate coordinate range
-        self.X_range = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
+        k = np.arange(self.X_gridDIM)
+        self.X = (k - self.X_gridDIM / 2) * self.dX
 
-        # generate momentum range as it corresponds to FFT frequencies
-        self.P_range = fftpack.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
+        # generate momentum range
+        self.P = (k - self.X_gridDIM / 2) * (np.pi / self.X_amplitude)
 
-        # get the momentum step size
-        self.dP = self.P_range[1] - self.P_range[0]
+        # allocate the array for wavefunction
+        self.wavefunction = np.zeros(self.X.size, dtype=np.complex)
 
+        # allocate an axillary array needed for propagation
+        self.expV = np.zeros_like(self.wavefunction)
+
+        # array of alternating signs
+        self.minus = (-1) ** k
+
+        # numexpr code to calculate (-)**k * exp(-0.5j * dt * V)
+        self.code_expV = "minus * exp(- 0.5j * dt * (%s))" % self.V
+
+        # numexpr code to calculate wavefunction * exp(-1j * dt * K)
+        self.code_expK = "wavefunction * exp(-1j * dt * (%s))" % self.K
+
+        # Check whether the necessary terms are specified to calculate the first Ehrenfest theorems
         try:
-            # Pre-calculate the exponent, if the potential is time independent
-            self._expV = np.exp(-self.dt*0.5j*self.V(self.X_range))
-        except TypeError:
-            # If exception is generated, then the potential is time-dependent
-            # and caching is not possible
-            pass
-
-        try:
-            # Pre-calculate the exponent, if the kinetic energy is time independent
-            self._expK = np.exp(-self.dt*1j*self.K(self.P_range))
-        except TypeError:
-            # If exception is generated, then the kinetic energy is time-dependent
-            # and caching is not possible
-            pass
-
-        # Check whether the necessary terms are specified to calculate the Ehrenfest theorems
-        try:
-            # Pre-calculate RHS if time independent
-            try:
-                self._diff_V = self.diff_V(self.X_range)
-            except TypeError:
-                pass
-
-            # Pre-calculate RHS if time independent
-            try:
-                self._diff_K = self.diff_K(self.P_range)
-            except TypeError:
-                pass
-
-            # Pre-calculate the potential and kinetic energies for
-            # calculating the expectation value of Hamiltonian
-            try:
-                self._V = self.V(self.X_range)
-            except TypeError:
-                pass
-            try:
-                self._K = self.K(self.P_range)
-            except TypeError:
-                pass
+            self.diff_V
+            self.diff_K
 
             # Lists where the expectation values of X and P
             self.X_average = []
@@ -122,13 +107,15 @@ class SplitOpSchrodinger1D:
             # List where the expectation value of the Hamiltonian will be calculated
             self.hamiltonian_average = []
 
+            # Allocate array for storing coordinate or momentum density of the wavefunction
+            self.density = np.zeros(self.X.size, dtype=np.float)
+
             # Flag requesting tha the Ehrenfest theorem calculations
             self.isEhrenfest = True
         except AttributeError:
             # Since self.diff_V and self.diff_K are not specified,
-            # the Ehrenfest theorem will not be calculated
+            # the first Ehrenfest theorem will not be calculated
             self.isEhrenfest = False
-
 
     def propagate(self, time_steps=1):
         """
@@ -138,140 +125,101 @@ class SplitOpSchrodinger1D:
         """
         for _ in xrange(time_steps):
 
-            expV = self.get_expV(self.t)
-            self.wavefunction *= expV
+            # make a half step in time
+            self.t += 0.5 * self.dt
+
+            # efficiently calculate expV
+            ne.evaluate(self.code_expV, local_dict=self.__dict__, out=self.expV)
+            self.wavefunction *= self.expV
 
             # going to the momentum representation
             self.wavefunction = fftpack.fft(self.wavefunction, overwrite_x=True)
-            self.wavefunction *= self.get_expK(self.t)
+            ne.evaluate(self.code_expK, local_dict=self.__dict__, out=self.wavefunction)
 
             # going back to the coordinate representation
             self.wavefunction = fftpack.ifft(self.wavefunction, overwrite_x=True)
-            self.wavefunction *= expV
+            self.wavefunction *= self.expV
 
             # normalize
             # this line is equivalent to
             # self.wavefunction /= np.sqrt(np.sum(np.abs(self.wavefunction)**2)*self.dX)
             self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
 
-            # calculate the Ehrenfest theorems
-            self.get_Ehrenfest(self.t)
+            # make a half step in time
+            self.t += 0.5 * self.dt
 
-            # increment current time
-            self.t += self.dt
+            # calculate the Ehrenfest theorems
+            self.get_Ehrenfest()
 
         return self.wavefunction
 
-    def get_Ehrenfest(self, t):
+    def get_Ehrenfest(self):
         """
-        Calculate observables entering the Ehrenfest theorems at time (t)
+        Calculate observables entering the Ehrenfest theorems
         """
         if self.isEhrenfest:
-            # calculate the coordinate density
-            density_coord = np.abs(self.wavefunction)**2
+            # evaluate the coordinate density
+            np.abs(self.wavefunction, out=self.density)
+            self.density *= self.density
             # normalize
-            density_coord /= density_coord.sum()
+            self.density /= self.density.sum()
 
             # save the current value of <X>
             self.X_average.append(
-                np.dot(density_coord, self.X_range)
+                ne.evaluate("sum(X * density)", local_dict=self.__dict__)
             )
             self.P_average_RHS.append(
-                -np.dot(density_coord, self.get_diff_V(t))
+                -ne.evaluate("sum((%s) * density)" % self.diff_V, local_dict=self.__dict__)
+            )
+
+            # save the potential energy
+            self.hamiltonian_average.append(
+                ne.evaluate("sum((%s) * density)" % self.V, local_dict=self.__dict__)
             )
 
             # calculate density in the momentum representation
-            density_momentum = np.abs(fftpack.fft(self.wavefunction))**2
+            np.abs(
+                fftpack.fft(self.minus * self.wavefunction, overwrite_x=True),
+                out=self.density
+            )
+            self.density *= self.density
             # normalize
-            density_momentum /= density_momentum.sum()
+            self.density /= self.density.sum()
 
             # save the current value of <P>
             self.P_average.append(
-                np.dot(density_momentum, self.P_range)
+                ne.evaluate("sum(P * density)", local_dict=self.__dict__)
             )
             self.X_average_RHS.append(
-                np.dot(density_momentum, self.get_diff_K(t))
+                ne.evaluate("sum((%s) * density)" % self.diff_K, local_dict=self.__dict__)
             )
 
-            # save the current expectation value of energy
-            self.hamiltonian_average.append(
-                np.dot(density_coord, self.get_V(t))
-                +
-                np.dot(density_momentum, self.get_K(t))
-            )
-
-    def get_expV(self, t):
-        """
-        Return the exponent of the potential energy at time (t)
-        """
-        try:
-            # access the pre-calculated value
-            return self._expV
-        except AttributeError:
-            # calculate the exponent
-            return np.exp(-self.dt*0.5j*self.V(self.X_range, t))
-
-    def get_expK(self, t):
-        """
-        Return the exponent of the kinetic energy at time (t)
-        """
-        try:
-            # access the pre-calculated value
-            return self._expK
-        except AttributeError:
-            # calculate the exponent
-            return np.exp(-self.dt*1j*self.K(self.P_range, t))
-
-    def get_diff_V(self, t):
-        """
-        Return the RHS for the Ehrenfest theorem at time (t)
-        """
-        try:
-            # access the pre-calculated value
-            return self._diff_V
-        except AttributeError:
-            return self.diff_V(self.X_range, t)
-
-    def get_diff_K(self, t):
-        """
-        Return the RHS for the Ehrenfest theorem at time (t)
-        """
-        try:
-            # access the pre-calculated value
-            return self._diff_K
-        except AttributeError:
-            return self.diff_K(self.P_range, t)
-
-    def get_K(self, t):
-        """
-        Return the kinetic energy at time (t)
-        """
-        try:
-            return self._K
-        except AttributeError:
-            return self.K(self.P_range, t)
-
-    def get_V(self, t):
-        """
-        Return the potential energy at time (t)
-        """
-        try:
-            return self._V
-        except AttributeError:
-            return self.V(self.X_range, t)
+            # add the kinetic energy to get the hamiltonian
+            self.hamiltonian_average[-1] += \
+                ne.evaluate("sum((%s) * density)" % self.K, local_dict=self.__dict__)
 
     def set_wavefunction(self, wavefunc):
         """
         Set the initial wave function
-        :param wavefunc: 1D numoy array contaning the wave function
+        :param wavefunc: 1D numpy array contaning the wave function
         :return: self
         """
-        # perform the consistency checks
-        assert wavefunc.shape == self.X_range.shape,\
-            "The grid size does not match with the wave function"
+        if isinstance(wavefunc, str):
+            # wavefunction is supplied as a string
+            ne.evaluate("%s + j0" % wavefunc, local_dict=self.__dict__, out=self.wavefunction)
 
-        # make sure the wavefunction is stored as a complex array
-        self.wavefunction = wavefunc + 0j
+        elif isinstance(wavefunc, np.ndarray):
+            # wavefunction is supplied as an array
+
+            # perform the consistency checks
+            assert wavefunc.shape == self.X.shape,\
+                "The grid size does not match with the wave function"
+
+            # make sure the wavefunction is stored as a complex array
+            np.copyto(self.wavefunction, wavefunc.astype(np.complex))
+
+        else:
+            raise ValueError("wavefunc must be either string or numpy.array")
 
         # normalize
         self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
@@ -301,11 +249,13 @@ if __name__ == '__main__':
             dt=0.01,
             t=0.,
 
-            V=lambda x: 0.5*(omega*x)**2,
-            diff_V=lambda x: omega**2*x,
+            omega=omega,
 
-            K=lambda p: 0.5*p**2,
-            diff_K=lambda p: p
+            V="0.5 * (omega * X) ** 2",
+            diff_V="omega ** 2 * X",
+
+            K="0.5 * P ** 2",
+            diff_K="P",
         )
 
         ##################################################################################################
@@ -315,13 +265,14 @@ if __name__ == '__main__':
 
         # set the initial condition
         harmonic_osc.set_wavefunction(
-            np.exp(-(harmonic_osc.X_range + 3.)**2)
+            np.exp(-(harmonic_osc.X + 3.)**2)
         )
 
         # get time duration of 6 periods
-        T = 6* 2.*np.pi/omega
+        T = 6 * 2. * np.pi / omega
+
         # get number of steps necessary to reach time T
-        time_steps = int(round(T/harmonic_osc.dt))
+        time_steps = int(round(T / harmonic_osc.dt))
 
         # propagate till time T and for each time step save a probability density
         wavefunctions = [harmonic_osc.propagate().copy() for _ in xrange(time_steps)]
@@ -333,7 +284,7 @@ if __name__ == '__main__':
             np.abs(wavefunctions)**2,
             # some plotting parameters
             origin='lower',
-            extent=[harmonic_osc.X_range.min(), harmonic_osc.X_range.max(), 0., time_steps*harmonic_osc.dt]
+            extent=[harmonic_osc.X.min(), harmonic_osc.X.max(), 0., time_steps * harmonic_osc.dt]
         )
         plt.xlabel('coordinate $x$ (a.u.)')
         plt.ylabel('time $t$ (a.u.)')
@@ -393,15 +344,20 @@ if __name__ == '__main__':
         harmonic_osc.set_wavefunction(eigenstate)
 
         plt.subplot(121)
-        plt.title("Test 2: Time evolution of eigenstate obtained via MUB")
+        plt.title("Test 2: Time evolution of eigenstate\n obtained via MUB")
+
+        # enable log color plot
+        from matplotlib.colors import LogNorm
 
         # propagate and plot
         plt.imshow(
             [np.abs(harmonic_osc.propagate())**2 for _ in xrange(time_steps)],
             # some plotting parameters
             origin='lower',
-            extent=[harmonic_osc.X_range.min(), harmonic_osc.X_range.max(), 0., time_steps*harmonic_osc.dt]
+            extent=[harmonic_osc.X.min(), harmonic_osc.X.max(), 0., time_steps * harmonic_osc.dt],
+            norm = LogNorm(1e-16, 1.)
         )
+        plt.colorbar()
         plt.xlabel('coordinate $x$ (a.u.)')
         plt.ylabel('time $t$ (a.u.)')
 
@@ -418,15 +374,17 @@ if __name__ == '__main__':
         harmonic_osc.set_wavefunction(eigenstate)
 
         plt.subplot(122)
-        plt.title("Test 3: Time evolution of eigenstate obtained via central finite difference")
+        plt.title("Test 3: Time evolution of eigenstate\n obtained via central finite difference")
 
         # propagate and plot
         plt.imshow(
             [np.abs(harmonic_osc.propagate())**2 for _ in xrange(time_steps)],
             # some plotting parameters
             origin='lower',
-            extent=[harmonic_osc.X_range.min(), harmonic_osc.X_range.max(), 0., time_steps*harmonic_osc.dt]
+            extent=[harmonic_osc.X.min(), harmonic_osc.X.max(), 0., time_steps * harmonic_osc.dt],
+            norm=LogNorm(1e-16, 1.)
         )
+        plt.colorbar()
         plt.xlabel('coordinate $x$ (a.u.)')
         plt.ylabel('time $t$ (a.u.)')
 

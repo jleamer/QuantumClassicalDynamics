@@ -206,7 +206,7 @@ class SplitOpSchrodinger1D:
         """
         if isinstance(wavefunc, str):
             # wavefunction is supplied as a string
-            ne.evaluate("%s + j0" % wavefunc, local_dict=self.__dict__, out=self.wavefunction)
+            ne.evaluate("%s + 0j" % wavefunc, local_dict=self.__dict__, out=self.wavefunction)
 
         elif isinstance(wavefunc, np.ndarray):
             # wavefunction is supplied as an array
@@ -265,7 +265,8 @@ if __name__ == '__main__':
 
         # set the initial condition
         harmonic_osc.set_wavefunction(
-            np.exp(-(harmonic_osc.X + 3.)**2)
+            # The same as np.exp(-(harmonic_osc.X + 3.)**2)
+            "exp(-(X + 3.) ** 2)"
         )
 
         # get time duration of 6 periods

@@ -65,6 +65,10 @@ class MUBQHamiltonian:
 
         # 2D array of alternating signs
         minus = (-1) ** (k[:, np.newaxis] + k[np.newaxis, :])
+        # see http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
+        # for explanation of np.newaxis and other array indexing operations
+        # also https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+        # for understanding the broadcasting in array operations
 
         # Construct the momentum dependent part
         self.Hamiltonian = np.diag(

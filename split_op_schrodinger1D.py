@@ -34,7 +34,7 @@ class SplitOpSchrodinger1D:
 
         # Check that all attributes were specified
         try:
-            # make sure self.X_amplitude has a value of power of 2
+            # make sure self.X_gridDIM has a value of power of 2
             assert 2 ** int(np.log2(self.X_gridDIM)) == self.X_gridDIM, \
                 "A value of the grid size (X_gridDIM) must be a power of 2"
         except AttributeError:
@@ -70,11 +70,11 @@ class SplitOpSchrodinger1D:
         self.dX = 2. * self.X_amplitude / self.X_gridDIM
 
         # generate coordinate range
-        k = np.arange(self.X_gridDIM)
-        self.X = (k - self.X_gridDIM / 2) * self.dX
+        self.k = np.arange(self.X_gridDIM)
+        self.X = (self.k - self.X_gridDIM / 2) * self.dX
 
         # generate momentum range
-        self.P = (k - self.X_gridDIM / 2) * (np.pi / self.X_amplitude)
+        self.P = (self.k - self.X_gridDIM / 2) * (np.pi / self.X_amplitude)
 
         # allocate the array for wavefunction
         self.wavefunction = np.zeros(self.X.size, dtype=np.complex)
@@ -82,19 +82,22 @@ class SplitOpSchrodinger1D:
         # allocate an axillary array needed for propagation
         self.expV = np.zeros_like(self.wavefunction)
 
-        # array of alternating signs
-        self.minus = (-1) ** k
-
         # numexpr code to calculate (-)**k * exp(-0.5j * dt * V)
-        self.code_expV = "minus * exp(- 0.5j * dt * (%s))" % self.V
+        self.code_expV = "(-1) ** k * exp(- 0.5j * dt * (%s))" % self.V
 
         # numexpr code to calculate wavefunction * exp(-1j * dt * K)
         self.code_expK = "wavefunction * exp(-1j * dt * (%s))" % self.K
 
-        # Check whether the necessary terms are specified to calculate the first Ehrenfest theorems
+        # Check whether the necessary terms are specified to calculate the first-order Ehrenfest theorems
         try:
-            self.diff_V
-            self.diff_K
+            # numexpr codes to calculate the First Ehrenfest theorems
+            self.code_P_average_RHS = "sum((%s) * density)" % self.diff_V
+            self.code_V_average = "sum((%s) * density)" % self.V
+            self.code_X_average = "sum(X * density)"
+
+            self.code_X_average_RHS = "sum((%s) * density)" % self.diff_K
+            self.code_K_average = "sum((%s) * density)" % self.K
+            self.code_P_average = "sum(P * density)"
 
             # Lists where the expectation values of X and P
             self.X_average = []
@@ -108,7 +111,10 @@ class SplitOpSchrodinger1D:
             self.hamiltonian_average = []
 
             # Allocate array for storing coordinate or momentum density of the wavefunction
-            self.density = np.zeros(self.X.size, dtype=np.float)
+            self.density = np.zeros(self.wavefunction.shape, dtype=np.float)
+
+            # Allocate a copy of the wavefunction for storing the wavefunction in the momentum representation
+            self.wavefunction_p = np.zeros_like(self.wavefunction)
 
             # Flag requesting tha the Ehrenfest theorem calculations
             self.isEhrenfest = True
@@ -166,42 +172,41 @@ class SplitOpSchrodinger1D:
 
             # save the current value of <X>
             self.X_average.append(
-                ne.evaluate("sum(X * density)", local_dict=self.__dict__)
+                ne.evaluate(self.code_X_average, local_dict=self.__dict__)
             )
             self.P_average_RHS.append(
-                -ne.evaluate("sum((%s) * density)" % self.diff_V, local_dict=self.__dict__)
+                -ne.evaluate(self.code_P_average_RHS, local_dict=self.__dict__)
             )
 
             # save the potential energy
             self.hamiltonian_average.append(
-                ne.evaluate("sum((%s) * density)" % self.V, local_dict=self.__dict__)
+                ne.evaluate(self.code_V_average, local_dict=self.__dict__)
             )
 
             # calculate density in the momentum representation
-            np.abs(
-                fftpack.fft(self.minus * self.wavefunction, overwrite_x=True),
-                out=self.density
-            )
+            ne.evaluate("(-1) ** k * wavefunction", local_dict=self.__dict__, out=self.wavefunction_p)
+            self.wavefunction_p = fftpack.fft(self.wavefunction_p, overwrite_x=True)
+            np.abs(self.wavefunction_p, out=self.density)
             self.density *= self.density
             # normalize
             self.density /= self.density.sum()
 
             # save the current value of <P>
             self.P_average.append(
-                ne.evaluate("sum(P * density)", local_dict=self.__dict__)
+                ne.evaluate(self.code_P_average, local_dict=self.__dict__)
             )
             self.X_average_RHS.append(
-                ne.evaluate("sum((%s) * density)" % self.diff_K, local_dict=self.__dict__)
+                ne.evaluate(self.code_X_average_RHS, local_dict=self.__dict__)
             )
 
             # add the kinetic energy to get the hamiltonian
             self.hamiltonian_average[-1] += \
-                ne.evaluate("sum((%s) * density)" % self.K, local_dict=self.__dict__)
+                ne.evaluate(self.code_K_average, local_dict=self.__dict__)
 
     def set_wavefunction(self, wavefunc):
         """
         Set the initial wave function
-        :param wavefunc: 1D numpy array contaning the wave function
+        :param wavefunc: 1D numpy array containing the wave function
         :return: self
         """
         if isinstance(wavefunc, str):
@@ -212,7 +217,7 @@ class SplitOpSchrodinger1D:
             # wavefunction is supplied as an array
 
             # perform the consistency checks
-            assert wavefunc.shape == self.X.shape,\
+            assert wavefunc.shape == self.wavefunction.shape,\
                 "The grid size does not match with the wave function"
 
             # make sure the wavefunction is stored as a complex array
@@ -325,7 +330,13 @@ if __name__ == '__main__':
         plt.subplot(133)
         plt.title("The expectation value of the hamiltonian")
 
-        plt.plot(times, harmonic_osc.hamiltonian_average)
+        # Analyze how well the energy was preserved
+        h = np.array(harmonic_osc.hamiltonian_average)
+        print(
+            "\nHamiltonian is preserved within the accuracy of %.2e percent" % (100. * (1. - h.min() / h.max()))
+        )
+
+        plt.plot(times, h)
         plt.ylabel('energy')
         plt.xlabel('time $t$ (a.u.)')
 

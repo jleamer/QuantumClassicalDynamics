@@ -284,6 +284,8 @@ class SplitOpSchrodinger2D:
 if __name__ == '__main__':
 
     # load tools for creating animation
+    import sys
+
     if sys.platform == 'darwin':
         # only for MacOS
         import matplotlib

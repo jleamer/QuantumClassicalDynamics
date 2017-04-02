@@ -376,7 +376,6 @@ if __name__ == '__main__':
             :param self:
             :return: image object
             """
-            self.set_quantum_sys()
             self.img.set_array([[0]])
             return self.img,
 
@@ -402,7 +401,7 @@ if __name__ == '__main__':
     # If you want to make a movie, comment "plt.show()" out and uncomment the lines bellow
 
     # Set up formatting for the movie files
-    #writer = writers['mencoder'](fps=10, metadata=dict(artist='Denys Bondar'), bitrate=-1)
+    #writer = writers['mencoder'](fps=10, metadata=dict(artist='a good student'), bitrate=-1)
 
     # Save animation into the file
     #animation.save('2D_Schrodinger.mp4', writer=writer)

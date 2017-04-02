@@ -3,7 +3,6 @@ Demonstration of the difference between adiabatic (slow) and diabatic (fast) evo
 In particular, we will illustrate the adiabatic theorem that states:
 A physical system remains in its instantaneous eigenstate if a given perturbation is acting slowly enough.
 """
-import functools
 import numpy as np
 
 import sys
@@ -38,19 +37,22 @@ class DynamicVisualized:
             t=-7.,
             X_gridDIM=1024,
             X_amplitude=10.,
-            K=lambda p: 0.5*p**2,
+            K="0.5 * P ** 2", #lambda p: 0.5*p**2,
         )
         self.dt = 0.005
 
         # initialize adiabatic system (i.e, with slow time dependence)
         self.adiabatic_sys = SplitOpSchrodinger1D(
-                V=lambda x, t: 0.01 * (1. - 0.95/(1. + np.exp(-0.2*t))) * x**4,
-                dt=self.dt, **self.qsys_params
+                #V=lambda x, t: 0.01 * (1. - 0.95/(1. + np.exp(-0.2*t))) * x**4,
+                V="0.01 * (1. - 0.95 / (1. + exp(-0.2 * t))) * X ** 4",
+                dt=self.dt,
+                **self.qsys_params
         )
 
         # initialize diabatic system (i.e, with fast time dependence)
         self.diabatic_sys = SplitOpSchrodinger1D(
-                V=lambda x, t: 0.01 * (1. - 0.95/(1. + np.exp(-5.*t))) * x**4,
+                #V=lambda x, t: 0.01 * (1. - 0.95/(1. + np.exp(-5.*t))) * x**4,
+                V="0.01 * (1. - 0.95 / (1. + exp(-5. * t))) * X ** 4",
                 dt=self.dt, **self.qsys_params
         )
 
@@ -63,8 +65,8 @@ class DynamicVisualized:
         self.fig = fig
 
         # plotting axis limits
-        xmin = self.diabatic_sys.X_range.min()
-        xmax = self.diabatic_sys.X_range.max()
+        xmin = self.diabatic_sys.X.min()
+        xmax = self.diabatic_sys.X.max()
         ymin = 1e-10
         ymax = 1e2
 
@@ -96,12 +98,14 @@ class DynamicVisualized:
         :param qsys: object representing quantum system propagation
         :return:
         """
-        # get the instantaneous potential energy by freezing time
-        V = functools.partial(qsys.V, t=qsys.t)
+        # instantaneous potential
+        V_inst = qsys.V.replace("t", "%.20f" % qsys.t)
 
         # perform the imaginary time propagation
-        ground_state = SplitOpSchrodinger1D(V=V, dt=-1j*2*self.dt, **self.qsys_params) \
-                        .set_wavefunction(np.exp(-qsys.X_range**2)) \
+        ground_state = SplitOpSchrodinger1D(
+                            V=V_inst, dt=-2j * self.dt, **self.qsys_params
+                        ) \
+                        .set_wavefunction("exp(-X ** 2)") \
                         .propagate(4000)
         # from mub_qhamiltonian import MUBQHamiltonian
         # ground_state = MUBQHamiltonian(V=V, **self.qsys_params).get_eigenstate(0)
@@ -126,10 +130,10 @@ class DynamicVisualized:
 
         # find instantaneous ground states
         ad_ground_state = self.get_instant_ground_state(self.adiabatic_sys)
-        self.ad_instant_eigns_line.set_data(self.adiabatic_sys.X_range, np.abs(ad_ground_state)**2)
+        self.ad_instant_eigns_line.set_data(self.adiabatic_sys.X, np.abs(ad_ground_state)**2)
 
         d_ground_state = self.get_instant_ground_state(self.diabatic_sys)
-        self.d_instant_eigns_line.set_data(self.adiabatic_sys.X_range, np.abs(d_ground_state)**2)
+        self.d_instant_eigns_line.set_data(self.adiabatic_sys.X, np.abs(d_ground_state)**2)
 
         if frame_num == 0:
             # this is the first frame then, set the initial condition
@@ -141,8 +145,8 @@ class DynamicVisualized:
             self.diabatic_sys.propagate(100)
 
         # update plots
-        self.adiabatic_line.set_data(self.adiabatic_sys.X_range, np.abs(self.adiabatic_sys.wavefunction)**2)
-        self.diabatic_line.set_data(self.diabatic_sys.X_range, np.abs(self.diabatic_sys.wavefunction)**2)
+        self.adiabatic_line.set_data(self.adiabatic_sys.X, np.abs(self.adiabatic_sys.wavefunction)**2)
+        self.diabatic_line.set_data(self.diabatic_sys.X, np.abs(self.diabatic_sys.wavefunction)**2)
 
         return self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line,
 
@@ -152,5 +156,10 @@ animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
                           init_func=visualizer.empty_frame, repeat=True, blit=True)
 plt.show()
 
+# If you want to make a movie, comment "plt.show()" out and uncomment the lines bellow
+
+# Set up formatting for the movie files
+# writer = writers['mencoder'](fps=10, metadata=dict(artist='a good student'), bitrate=-1)
+
 # Save animation into the file
-# animation.save('adiabatic_theorem.mp4', metadata={'artist':'good PhD student'})
+# animation.save('2D_Schrodinger.mp4', writer=writer)

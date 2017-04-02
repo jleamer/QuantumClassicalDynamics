@@ -284,6 +284,12 @@ class SplitOpSchrodinger2D:
 if __name__ == '__main__':
 
     # load tools for creating animation
+    if sys.platform == 'darwin':
+        # only for MacOS
+        import matplotlib
+
+        matplotlib.use('TKAgg')
+
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation, writers
 

@@ -25,7 +25,7 @@ class SplitOpSchrodinger2D:
             K(P1, P2) - kinetic energy as a string to be evaluated by numexpr
             diff_K_P1(P1, P2) (optional)
              and
-            diff_K_P2(P1, P2) (optionla) -- the kinetic energy gradient (as a string to be evaluated by numexpr)
+            diff_K_P2(P1, P2) (optional) -- the kinetic energy gradient (as a string to be evaluated by numexpr)
                                             for the Ehrenfest theorem calculations
 
             dt - time step
@@ -111,7 +111,7 @@ class SplitOpSchrodinger2D:
 
         # Check whether the necessary terms are specified to calculate the first-order Ehrenfest theorems
         try:
-            # numexpr codes to calculate the First Ehrenfest theorems
+            # numexpr codes to calculate the first-order Ehrenfest theorems
             self.code_P1_average_RHS = "sum((%s) * density)" % self.diff_V_X1
             self.code_P2_average_RHS = "sum((%s) * density)" % self.diff_V_X2
             self.code_V_average = "sum((%s) * density)" % self.V

@@ -37,13 +37,12 @@ class DynamicVisualized:
             t=-7.,
             X_gridDIM=1024,
             X_amplitude=10.,
-            K="0.5 * P ** 2", #lambda p: 0.5*p**2,
+            K="0.5 * P ** 2",
         )
         self.dt = 0.005
 
         # initialize adiabatic system (i.e, with slow time dependence)
         self.adiabatic_sys = SplitOpSchrodinger1D(
-                #V=lambda x, t: 0.01 * (1. - 0.95/(1. + np.exp(-0.2*t))) * x**4,
                 V="0.01 * (1. - 0.95 / (1. + exp(-0.2 * t))) * X ** 4",
                 dt=self.dt,
                 **self.qsys_params
@@ -51,9 +50,9 @@ class DynamicVisualized:
 
         # initialize diabatic system (i.e, with fast time dependence)
         self.diabatic_sys = SplitOpSchrodinger1D(
-                #V=lambda x, t: 0.01 * (1. - 0.95/(1. + np.exp(-5.*t))) * x**4,
                 V="0.01 * (1. - 0.95 / (1. + exp(-5. * t))) * X ** 4",
-                dt=self.dt, **self.qsys_params
+                dt=self.dt,
+                **self.qsys_params
         )
 
         #################################################################
@@ -92,6 +91,9 @@ class DynamicVisualized:
         diabatic_ax.set_xlabel("$x$ (a.u.)")
         #diabatic_ax.set_ylabel("probability density")
 
+        # Bundle all graphical objects
+        self.lines = lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
+
     def get_instant_ground_state(self, qsys):
         """
         Return the instantaneous ground state
@@ -104,9 +106,8 @@ class DynamicVisualized:
         # perform the imaginary time propagation
         ground_state = SplitOpSchrodinger1D(
                             V=V_inst, dt=-2j * self.dt, **self.qsys_params
-                        ) \
-                        .set_wavefunction("exp(-X ** 2)") \
-                        .propagate(4000)
+                        ).set_wavefunction("exp(-X ** 2)").propagate(4000)
+
         # from mub_qhamiltonian import MUBQHamiltonian
         # ground_state = MUBQHamiltonian(V=V, **self.qsys_params).get_eigenstate(0)
         return ground_state
@@ -116,10 +117,9 @@ class DynamicVisualized:
         Reset make empty frame
         :return: list of lines
         """
-        lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
-        for L in lines:
+        for L in self.lines:
             L.set_data([], [])
-        return lines
+        return self.lines
 
     def __call__(self, frame_num):
         """
@@ -130,10 +130,16 @@ class DynamicVisualized:
 
         # find instantaneous ground states
         ad_ground_state = self.get_instant_ground_state(self.adiabatic_sys)
-        self.ad_instant_eigns_line.set_data(self.adiabatic_sys.X, np.abs(ad_ground_state)**2)
+        self.ad_instant_eigns_line.set_data(
+            self.adiabatic_sys.X,
+            np.abs(ad_ground_state)**2
+        )
 
         d_ground_state = self.get_instant_ground_state(self.diabatic_sys)
-        self.d_instant_eigns_line.set_data(self.adiabatic_sys.X, np.abs(d_ground_state)**2)
+        self.d_instant_eigns_line.set_data(
+            self.adiabatic_sys.X,
+            np.abs(d_ground_state)**2
+        )
 
         if frame_num == 0:
             # this is the first frame then, set the initial condition
@@ -145,10 +151,16 @@ class DynamicVisualized:
             self.diabatic_sys.propagate(100)
 
         # update plots
-        self.adiabatic_line.set_data(self.adiabatic_sys.X, np.abs(self.adiabatic_sys.wavefunction)**2)
-        self.diabatic_line.set_data(self.diabatic_sys.X, np.abs(self.diabatic_sys.wavefunction)**2)
+        self.adiabatic_line.set_data(
+            self.adiabatic_sys.X,
+            np.abs(self.adiabatic_sys.wavefunction)**2
+        )
+        self.diabatic_line.set_data(
+            self.diabatic_sys.X,
+            np.abs(self.diabatic_sys.wavefunction)**2
+        )
 
-        return self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line,
+        return self.lines
 
 fig = plt.gcf()
 visualizer = DynamicVisualized(fig)

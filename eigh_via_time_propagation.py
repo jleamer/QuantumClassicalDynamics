@@ -11,17 +11,15 @@ quant_sys_params = dict(
     dt = 0.008,
     X_gridDIM=512,
     X_amplitude=10.,
-    K=lambda p: 0.5*p**2,
-    V=lambda x: 0.02 * x**4
+    K="0.5 * P ** 2",
+    V="0.02 * X ** 4",
 )
 
 # initialize the propagator
 quant_sys = SplitOpSchrodinger1D(**quant_sys_params)
 
 # set the initial condition that is not an eigenstate
-quant_sys.set_wavefunction(
-     np.exp(-0.4*(quant_sys.X_range + 2.5)**2)
-)
+quant_sys.set_wavefunction("exp(-0.4 * (X + 2.5) ** 2)")
 
 # Save the evolution
 wavefunctions = [quant_sys.propagate().copy() for _ in xrange(10000)]
@@ -29,13 +27,20 @@ wavefunctions = np.array(wavefunctions)
 
 #############################################################################
 
-# calculate iFFT with respect to the time axis
-wavefunctions_fft = fftpack.ifftshift(fftpack.ifft(wavefunctions, axis=0), axes=0)
+# calculate the alternating sequence of signs for iFFT wavefunction
+k = np.arange(wavefunctions.shape[0])
+minus = (-1) ** k[:, np.newaxis]
+
+# calculate the inverse Fourier transform with respect to the time axis
+wavefunctions_fft = fftpack.ifft(
+    minus * wavefunctions,
+    axis=0,
+    overwrite_x=True
+)
+wavefunctions_fft *= minus
 
 # energy axis
-energy_range = fftpack.ifftshift(
-    fftpack.fftfreq(wavefunctions.shape[0], quant_sys.dt/(2*np.pi))
-)
+energy_range = (k - k.size / 2) * np.pi / (0.5 * quant_sys.dt * k.size)
 print("Energy resolution (step size) %f (a.u.)" % (energy_range[1] - energy_range[0]))
 
 plt.subplot(211)
@@ -43,9 +48,9 @@ plt.title('$\\mathcal{F}_{t \\to E}^{-1}[ \\Psi(x, t) ]$ using FFT')
 
 # post process for better visualization
 abs_wavefunctions_fft = np.abs(wavefunctions_fft)
-abs_wavefunctions_fft /= abs_wavefunctions_fft.max(axis=1)[:,np.newaxis]
+abs_wavefunctions_fft /= abs_wavefunctions_fft.max(axis=1)[:, np.newaxis]
 
-extent = [quant_sys.X_range[0], quant_sys.X_range[-1], energy_range[0], energy_range[-1]]
+extent = [quant_sys.X[0], quant_sys.X[-1], energy_range[0], energy_range[-1]]
 plt.imshow(abs_wavefunctions_fft, extent=extent, origin='lower', aspect=0.1)
 plt.ylabel('energy, $E$ (a.u.)')
 plt.ylim(0., 60.)
@@ -61,14 +66,15 @@ plt.title('$\\mathcal{F}_{t \\to E}^{-1}[ \\Psi(x, t) ]$ using FFT with Blackman
 from scipy.signal import blackman
 
 wavefunctions_fft_w = fftpack.ifft(
-    wavefunctions * blackman(wavefunctions.shape[0])[:,np.newaxis],
-    axis=0, overwrite_x=True
+    minus * wavefunctions * blackman(k.size)[:, np.newaxis],
+    axis=0,
+    overwrite_x=True
 )
-wavefunctions_fft_w = fftpack.ifftshift(wavefunctions_fft_w, axes=0)
+wavefunctions_fft_w *= minus
 
 # post process for better visualization
 abs_wavefunctions_fft_w = np.abs(wavefunctions_fft_w)
-abs_wavefunctions_fft_w /= abs_wavefunctions_fft_w.max(axis=1)[:,np.newaxis]
+abs_wavefunctions_fft_w /= abs_wavefunctions_fft_w.max(axis=1)[:, np.newaxis]
 
 plt.imshow(abs_wavefunctions_fft_w, extent=extent, origin='lower', aspect=0.1)
 plt.xlabel('$x$ (a.u.)')
@@ -83,16 +89,21 @@ exact = MUBQHamiltonian(**quant_sys_params).diagonalize()
 
 # calculate the auto correlation function
 auto_corr = np.array(
-    [np.vdot(wavefunctions[0], psi)*quant_sys.dX for psi in wavefunctions]
+    [np.vdot(wavefunctions[0], psi) * quant_sys.dX for psi in wavefunctions]
 )
 
+# calculate the alternating sequence of signs for iFFT autocorrelation function
+minus = (-1) ** k
+
 # abs(fft) of the auto correlation function
-auto_corr_fft = np.abs(fftpack.ifftshift(fftpack.ifft(auto_corr)))
+auto_corr_fft = np.abs(
+    fftpack.ifft(minus * auto_corr, overwrite_x=True)
+)
 
 #plt.subplot(221)
 # the windowed fft of the auto correlation function
 auto_corr_fft_w = np.abs(
-    fftpack.ifftshift(fftpack.ifft(auto_corr * blackman(auto_corr.size)))
+    fftpack.ifft(minus * auto_corr * blackman(auto_corr.size), overwrite_x=True)
 )
 
 plt.subplot(121)
@@ -117,15 +128,17 @@ plt.title("Approximate vs exact eigenstates")
 for indx in [3, 30]:
 
     # extract approximate eigenstate from wavefunctions_fft_w
-    density = wavefunctions_fft_w[np.searchsorted(energy_range, exact.energies[indx])]
+    density = wavefunctions_fft_w[
+        np.searchsorted(energy_range, exact.energies[indx])
+    ]
 
     # normalize the underlying density
-    density = np.abs(density)**2
+    density = np.abs(density) ** 2
     density /= density.sum() * quant_sys.dX
-    plt.plot(quant_sys.X_range, density, label="approx %d" % indx)
+    plt.plot(quant_sys.X, density, label="approx %d" % indx)
 
     # plot the exact eigenstate
-    plt.plot(quant_sys.X_range, np.abs(exact.eigenstates[indx])**2, label='exact %d' % indx)
+    plt.plot(quant_sys.X, np.abs(exact.eigenstates[indx])**2, label='exact %d' % indx)
 
 plt.legend()
 plt.xlabel('$x$ (a.u.)')

@@ -1,101 +1,171 @@
-"""
-Demonstration of the imaginary time propagation to obtain the ground and excited state.
-"""
+from split_op_schrodinger1D import SplitOpSchrodinger1D, fftpack, np, ne, linalg
 
-import numpy as np
-from split_op_schrodinger1D import SplitOpSchrodinger1D # Previously developed propagator
-from scipy import linalg # Linear algebra for dense matrix
-import matplotlib.pyplot as plt # Plotting facility
+# We will use the inheritance in the object orienting programing (see, e.g.,
+# https://docs.python.org/2/tutorial/classes.html) to add methods to already developed propagator (SplitOpSchrodinger1D)
+# that find stationary states via the imaginary-time propagation
 
 
-# Let's find the ground state of argon atom with the single active electron approximation
+class ImgTimePropagation(SplitOpSchrodinger1D):
 
-# specify parameters separately
-# note the time step was not included
-atom_params = dict(
-    X_gridDIM=1024,
-    X_amplitude=10.,
-    K="0.5 * P ** 2", #lambda p: 0.5*p**2,
-    V="-1. / sqrt(X ** 2 + 1.37)",#"#lambda x: -1./np.sqrt(x**2 + 1.37) # the soft core Coulomb potential
-)
+    def get_stationary_states(self, nstates, nsteps=10000):
+        """
+        Obtain stationary states via the imaginary time propagation
+        :param nstates: number of states to obtaine.
+                If nstates = 1, only the ground state is obtained. If nstates = 2,
+                the ground and first exited states are obtained, etc
+        :param nsteps: number of the imaginary time steps to take
+        :return:self
+        """
+        # since there is no time dependence (self.t) during the imaginary time propagation
+        # pre-calculate imaginary time exponents of the potential and kinetic energy
+        img_expV = ne.evaluate("(-1) ** k * exp(-0.5 * dt * (%s))" % self.V, local_dict=self.__dict__)
+        img_expK = ne.evaluate("exp(-dt * (%s))" % self.K, local_dict=self.__dict__)
 
-# the amplitude of time step
-dt = 0.005
+        # initialize the list where the stationary states will be saved
+        self.stationary_states = []
 
-# initialize the imaginary time propagator
-atom_sys = SplitOpSchrodinger1D(dt=-1j * dt, **atom_params)
+        # boolean flag determining the parity of wavefunction
+        even = True
 
-# make a guess for the ground state
-# it is a good idea to make it nodeless
-atom_sys.set_wavefunction("exp(-X ** 2)")
+        for n in xrange(nstates):
 
-##################################################################################################
+            # initialize the wavefunction depending on the parity
+            if even:
+                self.set_wavefunction("exp(-X ** 2)")
+            else:
+                self.set_wavefunction("X * exp(-X ** 2)")
+            even = not even
+
+            # get an alias pointer to self.wavefunction
+            wavefunction = self.wavefunction
+
+            for _ in xrange(nsteps):
+                #################################################################################
+                #
+                #   Make an imaginary time step
+                #
+                #################################################################################
+                wavefunction *= img_expV
+
+                # going to the momentum representation
+                wavefunction = fftpack.fft(wavefunction, overwrite_x=True)
+                wavefunction *= img_expK
+
+                # going back to the coordinate representation
+                wavefunction = fftpack.ifft(wavefunction, overwrite_x=True)
+                wavefunction *= img_expV
+
+                #################################################################################
+                #
+                #    Project out all previously calculated stationary states
+                #
+                #################################################################################
+
+                # normalize
+                wavefunction /= linalg.norm(wavefunction)
+
+                # calculate the projections
+                projs = [np.vdot(psi, wavefunction) for psi in self.stationary_states]
+
+                # project out the stationary states
+                for psi, proj in zip(self.stationary_states, projs):
+                    ne.evaluate("wavefunction - proj * psi", out=wavefunction)
+
+                # normalize
+                wavefunction /= linalg.norm(wavefunction)
+
+            # save obtained approximation to the stationary state
+            self.stationary_states.append(wavefunction.copy())
+
+        return self
+
+##############################################################################
 #
-# Ground state calculations
+#   Run some examples
 #
-##################################################################################################
+##############################################################################
 
-# perform the imaginary time propagation (the longer, the better)
-ground_state = atom_sys.propagate(4000)
+if __name__ == '__main__':
 
-# get "exact" ground state by diagonalizing the MUB hamiltonian
-from mub_qhamiltonian import MUBQHamiltonian
-ground_state_exact = MUBQHamiltonian(**atom_params).get_eigenstate(0)
+    # load tools for creating animation
+    import sys
 
+    if sys.platform == 'darwin':
+        # only for MacOS
+        import matplotlib
 
-# check the quality of ground state by propagating it in the real time
-ground_state_after = SplitOpSchrodinger1D(dt=dt, **atom_params) \
-                        .set_wavefunction(ground_state) \
-                        .propagate(3000)
+        matplotlib.use('TKAgg')
 
-# during the real time propagation the wave function may pick up the phase
-ground_state_after = np.abs(ground_state_after)
+    import matplotlib.pyplot as plt
 
-plt.title("Ground state calculation for argon within the single active electron approximation")
-# to plot potential energy
-# plt.plot(atom_sys.X_range, atom_sys.V(atom_sys.X_range), label='potential energy')
-plt.semilogy(atom_sys.X, ground_state, 'r-', label='ground state')
-plt.semilogy(atom_sys.X, ground_state_after, 'b--', label='ground state after propagation')
-plt.semilogy(atom_sys.X, ground_state_exact, 'g-.', label='ground state via diagonalization')
-plt.xlabel("$x$ (a.u.)")
-plt.legend(loc='lower center')
-plt.show()
+    # specify parameters separately
+    atom_params = dict(
+        X_gridDIM=1024,
+        X_amplitude=10.,
+        dt=0.05,
+        K="0.5 * P ** 2",
+        V="-1. / sqrt(X ** 2 + 1.37)",
+    )
 
-##################################################################################################
-#
-# First excited state calculations
-#
-##################################################################################################
+    # construct the propagator
+    atom_sys = ImgTimePropagation(**atom_params)
 
-# Set the initial guess for the first excited state
-# anything with a node should do the job
-atom_sys.set_wavefunction(
-    atom_sys.X * ground_state
-)
+    # find the ground and first excited states via the imaginary time method
+    atom_sys.get_stationary_states(4)
 
-for _ in xrange(4000):
-    # take a step in the imaginary time propagation
-    excited1_state = atom_sys.propagate()
+    # get "exact" eigenstates by diagonalizing the MUB hamiltonian
+    from mub_qhamiltonian import MUBQHamiltonian
+    atom_mub = MUBQHamiltonian(**atom_params)
 
-    # project out the ground state
-    excited1_state -= ground_state * np.dot(ground_state, excited1_state) * atom_sys.dX
+    plt.subplot(221)
+    plt.title("Ground state calculation for argon within the single active electron approximation")
 
-# Finally, normalize the wavefunction
-excited1_state /= linalg.norm(excited1_state) * np.sqrt(atom_sys.dX)
+    # set the ground state (obtained via the imaginary time propagation) as the initial condition
+    atom_sys.set_wavefunction(atom_sys.stationary_states[0])
 
-# check the quality of the first excited state by propagating it in the real time
-excited1_state_after = SplitOpSchrodinger1D(dt=dt, **atom_params) \
-                        .set_wavefunction(excited1_state) \
-                        .propagate(3000)
+    plt.semilogy(atom_sys.X, atom_sys.wavefunction, 'r-', label='state via img-time')
+    plt.semilogy(atom_sys.X, atom_sys.propagate(10000), 'b--', label='state after propagation')
+    plt.semilogy(atom_sys.X, atom_mub.get_eigenstate(0), 'g-.', label='state via MUB')
+    plt.xlabel("$x$ (a.u.)")
+    plt.legend(loc='lower center')
 
-# get the first excited state by diagonalizing the MUB hamiltonian
-excited1_state_exact = MUBQHamiltonian(**atom_params).get_eigenstate(1)
+    plt.subplot(222)
+    plt.title("First exited state calculation of argon")
 
-plt.title("First eited state calculation of argon")
-plt.semilogy(atom_sys.X, np.abs(excited1_state), 'r-', label='exited state')
-plt.semilogy(atom_sys.X, np.abs(excited1_state_after), 'b--', label='excited state after propagation')
-plt.semilogy(atom_sys.X, np.abs(excited1_state_exact), 'g-.', label='excited state via diagonalization')
-plt.ylim([1e-4, 1e0])
-plt.xlabel("$x$ (a.u.)")
-plt.legend(loc='lower center')
-plt.show()
+    # set the first excited state (obtained via the imaginary time propagation) as the initial condition
+    atom_sys.set_wavefunction(atom_sys.stationary_states[1])
+
+    plt.semilogy(atom_sys.X, np.abs(atom_sys.wavefunction), 'r-', label='state via img-time')
+    plt.semilogy(atom_sys.X, np.abs(atom_sys.propagate(10000)), 'b--', label='state after propagation')
+    plt.semilogy(atom_sys.X, np.abs(atom_mub.get_eigenstate(1)), 'g-.', label='state via MUB')
+    plt.ylim([1e-6, 1e0])
+    plt.xlabel("$x$ (a.u.)")
+    plt.legend(loc='lower center')
+
+    plt.subplot(223)
+    plt.title("Second exited state calculation of argon")
+
+    # set the second excited state (obtained via the imaginary time propagation) as the initial condition
+    atom_sys.set_wavefunction(atom_sys.stationary_states[2])
+
+    plt.semilogy(atom_sys.X, np.abs(atom_sys.wavefunction), 'r-', label='state via img-time')
+    plt.semilogy(atom_sys.X, np.abs(atom_sys.propagate(10000)), 'b--', label='state after propagation')
+    plt.semilogy(atom_sys.X, np.abs(atom_mub.get_eigenstate(2)), 'g-.', label='state via MUB')
+    plt.ylim([1e-6, 1e0])
+    plt.xlabel("$x$ (a.u.)")
+    plt.legend(loc='lower center')
+
+    plt.subplot(224)
+    plt.title("Third exited state calculation of argon")
+
+    # set the third excited state (obtained via the imaginary time propagation) as the initial condition
+    atom_sys.set_wavefunction(atom_sys.stationary_states[3])
+
+    plt.semilogy(atom_sys.X, np.abs(atom_sys.wavefunction), 'r-', label='state via img-time')
+    plt.semilogy(atom_sys.X, np.abs(atom_sys.propagate(10000)), 'b--', label='state after propagation')
+    plt.semilogy(atom_sys.X, np.abs(atom_mub.get_eigenstate(3)), 'g-.', label='state via MUB')
+    plt.ylim([1e-6, 1e0])
+    plt.xlabel("$x$ (a.u.)")
+    plt.legend(loc='lower center')
+
+    plt.show()

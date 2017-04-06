@@ -250,7 +250,7 @@ class SplitOpSchrodinger2D:
     def set_wavefunction(self, wavefunc):
         """
         Set the initial wave function
-        :param wavefunc: 2D numpy array containing the wave function
+        :param wavefunc: 2D numpy array or sting containing the wave function
         :return: self
         """
         if isinstance(wavefunc, str):

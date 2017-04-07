@@ -24,20 +24,21 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
         # initialize the list where the stationary states will be saved
         self.stationary_states = []
 
+        # allocate the memory for the imaginary time propagation wavefunction
+        wavefunction = np.zeros_like(self.wavefunction)
+
         # boolean flag determining the parity of wavefunction
         even = True
 
         for n in xrange(nstates):
 
             # initialize the wavefunction depending on the parity
-            if even:
-                self.set_wavefunction("exp(-X ** 2)")
-            else:
-                self.set_wavefunction("X * exp(-X ** 2)")
+            ne.evaluate(
+                "exp(-X ** 2)" if even else "X * exp(-X ** 2)",
+                local_dict=self.__dict__,
+                out=wavefunction,
+            )
             even = not even
-
-            # get an alias pointer to self.wavefunction
-            wavefunction = self.wavefunction
 
             for _ in xrange(nsteps):
                 #################################################################################
@@ -62,17 +63,17 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
                 #################################################################################
 
                 # normalize
-                wavefunction /= linalg.norm(wavefunction)
+                wavefunction /= linalg.norm(wavefunction) * np.sqrt(self.dX)
 
                 # calculate the projections
-                projs = [np.vdot(psi, wavefunction) for psi in self.stationary_states]
+                projs = [np.vdot(psi, wavefunction) * self.dX for psi in self.stationary_states]
 
                 # project out the stationary states
                 for psi, proj in zip(self.stationary_states, projs):
                     ne.evaluate("wavefunction - proj * psi", out=wavefunction)
 
                 # normalize
-                wavefunction /= linalg.norm(wavefunction)
+                wavefunction /= linalg.norm(wavefunction) * np.sqrt(self.dX)
 
             # save obtained approximation to the stationary state
             self.stationary_states.append(wavefunction.copy())

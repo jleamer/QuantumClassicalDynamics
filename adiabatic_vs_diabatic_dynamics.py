@@ -13,8 +13,7 @@ if sys.platform == 'darwin':
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation # tools for creating animation
-
-from split_op_schrodinger1D import SplitOpSchrodinger1D
+from imag_time_propagation import ImgTimePropagation
 
 
 class DynamicVisualized:
@@ -35,23 +34,21 @@ class DynamicVisualized:
         # common quantum system parameters
         self.qsys_params = dict(
             t=-7.,
+            dt=0.005,
             X_gridDIM=1024,
             X_amplitude=10.,
             K="0.5 * P ** 2",
         )
-        self.dt = 0.005
 
         # initialize adiabatic system (i.e, with slow time dependence)
-        self.adiabatic_sys = SplitOpSchrodinger1D(
+        self.adiabatic_sys = ImgTimePropagation(
                 V="0.01 * (1. - 0.95 / (1. + exp(-0.2 * t))) * X ** 4",
-                dt=self.dt,
                 **self.qsys_params
         )
 
         # initialize diabatic system (i.e, with fast time dependence)
-        self.diabatic_sys = SplitOpSchrodinger1D(
+        self.diabatic_sys = ImgTimePropagation(
                 V="0.01 * (1. - 0.95 / (1. + exp(-5. * t))) * X ** 4",
-                dt=self.dt,
                 **self.qsys_params
         )
 
@@ -92,25 +89,7 @@ class DynamicVisualized:
         #diabatic_ax.set_ylabel("probability density")
 
         # Bundle all graphical objects
-        self.lines = lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
-
-    def get_instant_ground_state(self, qsys):
-        """
-        Return the instantaneous ground state
-        :param qsys: object representing quantum system propagation
-        :return:
-        """
-        # instantaneous potential
-        V_inst = qsys.V.replace("t", "%.20f" % qsys.t)
-
-        # perform the imaginary time propagation
-        ground_state = SplitOpSchrodinger1D(
-                            V=V_inst, dt=-2j * self.dt, **self.qsys_params
-                        ).set_wavefunction("exp(-X ** 2)").propagate(4000)
-
-        # from mub_qhamiltonian import MUBQHamiltonian
-        # ground_state = MUBQHamiltonian(V=V, **self.qsys_params).get_eigenstate(0)
-        return ground_state
+        self.lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
 
     def empty_frame(self):
         """
@@ -127,18 +106,18 @@ class DynamicVisualized:
         :param frame_num: current frame number
         :return: line objects
         """
-
         # find instantaneous ground states
-        ad_ground_state = self.get_instant_ground_state(self.adiabatic_sys)
+        ad_ground_state = self.adiabatic_sys.get_stationary_states(1, nsteps=5000).stationary_states[0]
+        d_ground_state = self.diabatic_sys.get_stationary_states(1, nsteps=5000).stationary_states[0]
+
         self.ad_instant_eigns_line.set_data(
             self.adiabatic_sys.X,
-            np.abs(ad_ground_state)**2
+            np.abs(ad_ground_state) ** 2
         )
 
-        d_ground_state = self.get_instant_ground_state(self.diabatic_sys)
         self.d_instant_eigns_line.set_data(
-            self.adiabatic_sys.X,
-            np.abs(d_ground_state)**2
+            self.diabatic_sys.X,
+            np.abs(d_ground_state) ** 2
         )
 
         if frame_num == 0:

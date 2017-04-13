@@ -30,6 +30,7 @@ class SplitOpSchrodinger2D:
 
             dt - time step
             t (optional) - initial value of time
+            abs_boundary (optional) -- absorbing boundary (as a string to be evaluated by numexpr)
         """
 
         # save all attributes
@@ -78,6 +79,15 @@ class SplitOpSchrodinger2D:
             print("Warning: Initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
+        try:
+            self.abs_boundary
+        except AttributeError:
+            print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
+            self.abs_boundary = 1.
+
+        # it is convenient for some numexprsions to declare pi in the local scope
+        self.pi = np.pi
+
         # get coordinate step sizes
         self.dX1 = 2. * self.X1_amplitude / self.X1_gridDIM
         self.dX2 = 2. * self.X2_amplitude / self.X2_gridDIM
@@ -104,7 +114,7 @@ class SplitOpSchrodinger2D:
         self.expV = np.zeros_like(self.wavefunction)
 
         # numexpr code to calculate (-)**(k1 + k2) * exp(-0.5j * dt * V)
-        self.code_expV = "(-1) ** (k1 + k2) * exp(- 0.5j * dt * (%s))" % self.V
+        self.code_expV = "(%s) * (-1) ** (k1 + k2) * exp(- 0.5j * dt * (%s))" % (self.abs_boundary, self.V)
 
         # numexpr code to calculate wavefunction * exp(-1j * dt * K)
         self.code_expK = "wavefunction * exp(-1j * dt * (%s))" % self.K

@@ -1,7 +1,9 @@
 from split_op_schrodinger1D import SplitOpSchrodinger1D, fftpack, np, ne, linalg
 
 # We will use the inheritance in the object orienting programing (see, e.g.,
-# https://docs.python.org/2/tutorial/classes.html) to add methods to already developed propagator (SplitOpSchrodinger1D)
+# https://en.wikipedia.org/wiki/Inheritance_%28object-oriented_programming%29 and
+# https://docs.python.org/2/tutorial/classes.html)
+# to add methods to already developed propagator (SplitOpSchrodinger1D)
 # that find stationary states via the imaginary-time propagation
 
 
@@ -24,19 +26,15 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
         # initialize the list where the stationary states will be saved
         self.stationary_states = []
 
-        # allocate the memory for the imaginary time propagation wavefunction
-        wavefunction = np.zeros_like(self.wavefunction)
-
         # boolean flag determining the parity of wavefunction
         even = True
 
         for n in xrange(nstates):
 
-            # initialize the wavefunction depending on the parity
-            ne.evaluate(
+            # allocate and initialize the wavefunction depending on the parity
+            wavefunction = ne.evaluate(
                 "exp(-X ** 2)" if even else "X * exp(-X ** 2)",
                 local_dict=self.__dict__,
-                out=wavefunction,
             )
             even = not even
 
@@ -76,7 +74,7 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
                 wavefunction /= linalg.norm(wavefunction) * np.sqrt(self.dX)
 
             # save obtained approximation to the stationary state
-            self.stationary_states.append(wavefunction.copy())
+            self.stationary_states.append(wavefunction)
 
         return self
 
@@ -124,9 +122,21 @@ if __name__ == '__main__':
     # set the ground state (obtained via the imaginary time propagation) as the initial condition
     atom_sys.set_wavefunction(atom_sys.stationary_states[0])
 
-    plt.semilogy(atom_sys.X, atom_sys.wavefunction, 'r-', label='state via img-time')
-    plt.semilogy(atom_sys.X, atom_sys.propagate(10000), 'b--', label='state after propagation')
-    plt.semilogy(atom_sys.X, atom_mub.get_eigenstate(0), 'g-.', label='state via MUB')
+    plt.semilogy(
+        atom_sys.X,
+        atom_sys.wavefunction,
+        'r-', label='state via img-time'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        atom_sys.propagate(10000),
+        'b--', label='state after propagation'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        atom_mub.get_eigenstate(0),
+        'g-.', label='state via MUB'
+    )
     plt.xlabel("$x$ (a.u.)")
     plt.legend(loc='lower center')
 
@@ -136,9 +146,21 @@ if __name__ == '__main__':
     # set the first excited state (obtained via the imaginary time propagation) as the initial condition
     atom_sys.set_wavefunction(atom_sys.stationary_states[1])
 
-    plt.semilogy(atom_sys.X, np.abs(atom_sys.wavefunction), 'r-', label='state via img-time')
-    plt.semilogy(atom_sys.X, np.abs(atom_sys.propagate(10000)), 'b--', label='state after propagation')
-    plt.semilogy(atom_sys.X, np.abs(atom_mub.get_eigenstate(1)), 'g-.', label='state via MUB')
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_sys.wavefunction),
+        'r-', label='state via img-time'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_sys.propagate(10000)),
+        'b--', label='state after propagation'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_mub.get_eigenstate(1)),
+        'g-.', label='state via MUB'
+    )
     plt.ylim([1e-6, 1e0])
     plt.xlabel("$x$ (a.u.)")
     plt.legend(loc='lower center')
@@ -149,9 +171,21 @@ if __name__ == '__main__':
     # set the second excited state (obtained via the imaginary time propagation) as the initial condition
     atom_sys.set_wavefunction(atom_sys.stationary_states[2])
 
-    plt.semilogy(atom_sys.X, np.abs(atom_sys.wavefunction), 'r-', label='state via img-time')
-    plt.semilogy(atom_sys.X, np.abs(atom_sys.propagate(10000)), 'b--', label='state after propagation')
-    plt.semilogy(atom_sys.X, np.abs(atom_mub.get_eigenstate(2)), 'g-.', label='state via MUB')
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_sys.wavefunction),
+        'r-', label='state via img-time'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_sys.propagate(10000)),
+        'b--', label='state after propagation'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_mub.get_eigenstate(2)),
+        'g-.', label='state via MUB'
+    )
     plt.ylim([1e-6, 1e0])
     plt.xlabel("$x$ (a.u.)")
     plt.legend(loc='lower center')
@@ -162,9 +196,21 @@ if __name__ == '__main__':
     # set the third excited state (obtained via the imaginary time propagation) as the initial condition
     atom_sys.set_wavefunction(atom_sys.stationary_states[3])
 
-    plt.semilogy(atom_sys.X, np.abs(atom_sys.wavefunction), 'r-', label='state via img-time')
-    plt.semilogy(atom_sys.X, np.abs(atom_sys.propagate(10000)), 'b--', label='state after propagation')
-    plt.semilogy(atom_sys.X, np.abs(atom_mub.get_eigenstate(3)), 'g-.', label='state via MUB')
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_sys.wavefunction),
+        'r-', label='state via img-time'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_sys.propagate(10000)),
+        'b--', label='state after propagation'
+    )
+    plt.semilogy(
+        atom_sys.X,
+        np.abs(atom_mub.get_eigenstate(3)),
+        'g-.', label='state via MUB'
+    )
     plt.ylim([1e-6, 1e0])
     plt.xlabel("$x$ (a.u.)")
     plt.legend(loc='lower center')

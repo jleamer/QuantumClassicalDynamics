@@ -13,7 +13,7 @@ class SplitOpSchrodinger2D:
     def __init__(self, **kwargs):
         """
         The following parameters must be specified
-            X1_gridDIM, X1_gridDIM - specifying the grid size
+            X1_gridDIM, X2_gridDIM - specifying the grid size
             X1_amplitude, X2_amplitude - maximum value of the coordinates
 
             V(X1, X2) - potential energy as a string to be evaluated by numexpr

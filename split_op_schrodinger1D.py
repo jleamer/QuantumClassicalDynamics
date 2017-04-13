@@ -21,6 +21,7 @@ class SplitOpSchrodinger1D:
             diff_V (optional) -- the derivative of the potential energy for the Ehrenfest theorem calculations
             diff_K (optional) -- the derivative of the kinetic energy for the Ehrenfest theorem calculations
             t (optional) - initial value of time
+            abs_boundary (optional) -- absorbing boundary (as a string to be evaluated by numexpr)
         """
 
         # save all attributes
@@ -66,6 +67,15 @@ class SplitOpSchrodinger1D:
             print("Warning: Initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
+        try:
+            self.abs_boundary
+        except AttributeError:
+            print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
+            self.abs_boundary = 1.
+
+        # it is convenient for some numexprsions to declare pi in the local scope
+        self.pi = np.pi
+
         # get coordinate step size
         self.dX = 2. * self.X_amplitude / self.X_gridDIM
 
@@ -83,7 +93,7 @@ class SplitOpSchrodinger1D:
         self.expV = np.zeros_like(self.wavefunction)
 
         # numexpr code to calculate (-)**k * exp(-0.5j * dt * V)
-        self.code_expV = "(-1) ** k * exp(- 0.5j * dt * (%s))" % self.V
+        self.code_expV = "(%s) * (-1) ** k * exp(-0.5j * dt * (%s))" % (self.abs_boundary, self.V)
 
         # numexpr code to calculate wavefunction * exp(-1j * dt * K)
         self.code_expK = "wavefunction * exp(-1j * dt * (%s))" % self.K

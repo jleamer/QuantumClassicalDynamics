@@ -121,14 +121,15 @@ class MUBQHamiltonian:
             self.energies = np.real(self.energies)
 
             # covert to the formal convenient for storage
-            self.eigenstates = np.ascontiguousarray(self.eigenstates.T.real)
+            self.eigenstates = self.eigenstates.T
 
             # normalize each eigenvector
             for psi in self.eigenstates:
                 psi /= linalg.norm(psi) * np.sqrt(self.dX)
 
             # check that the ground state is not negative
-            np.abs(self.eigenstates[0], out=self.eigenstates[0])
+            if self.eigenstates[0].real.sum() < 0:
+                self.eigenstates *= -1
 
         return self
 
@@ -156,7 +157,7 @@ if __name__ == '__main__':
 
         # plot eigenfunctions
         for n in range(4):
-            plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n), label=str(n))
+            plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n).real, label=str(n))
 
         print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
         print(harmonic_osc.energies[:20])

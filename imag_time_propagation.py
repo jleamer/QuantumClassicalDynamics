@@ -124,17 +124,17 @@ if __name__ == '__main__':
 
     plt.semilogy(
         atom_sys.X,
-        atom_sys.wavefunction,
+        atom_sys.wavefunction.real,
         'r-', label='state via img-time'
     )
     plt.semilogy(
         atom_sys.X,
-        atom_sys.propagate(10000),
+        np.abs(atom_sys.propagate(10000)),
         'b--', label='state after propagation'
     )
     plt.semilogy(
         atom_sys.X,
-        atom_mub.get_eigenstate(0),
+        atom_mub.get_eigenstate(0).real,
         'g-.', label='state via MUB'
     )
     plt.xlabel("$x$ (a.u.)")

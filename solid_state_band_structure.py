@@ -16,7 +16,7 @@ sys_params = dict(
     V0=0.37,
 
     # the kinetic energy (the value of quasimomentum will be assigned bellow)
-    K="0.5 * (P + k) ** 2",
+    K="0.5 * (P + kq) ** 2",
 
     # Exactly solvable Mathieu-type periodic system
     V="-V0 * (1 + cos(pi * X / X_amplitude))",
@@ -29,7 +29,7 @@ k_quasimomenta = np.linspace(-0.5, 0.5, 100)
 
 # band structure
 bands = np.array([
-    MUBQHamiltonian(k=k, **sys_params).get_energy(slice(0, 4)) for k in k_quasimomenta
+    MUBQHamiltonian(kq=kq, **sys_params).get_energy(slice(0, 4)) for kq in k_quasimomenta
 ])
 
 # Conversion factor of atomic units to eV

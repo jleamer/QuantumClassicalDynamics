@@ -40,6 +40,9 @@ sys_params = dict(
 
     # the derivative of the potential to calculate Ehrenfest
     diff_V="X * (X ** 2 + 1.37) ** (-1.5) + (%s)" % E_laser,
+
+    # add constant pi
+    pi=np.pi,
 )
 
 #########################################################################

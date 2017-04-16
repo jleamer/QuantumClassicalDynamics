@@ -85,9 +85,6 @@ class SplitOpSchrodinger2D:
             print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
             self.abs_boundary = 1.
 
-        # it is convenient for some numexprsions to declare pi in the local scope
-        self.pi = np.pi
-
         # get coordinate step sizes
         self.dX1 = 2. * self.X1_amplitude / self.X1_gridDIM
         self.dX2 = 2. * self.X2_amplitude / self.X2_gridDIM

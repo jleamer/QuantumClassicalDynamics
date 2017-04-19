@@ -25,7 +25,7 @@ sys_params = dict(
 )
 
 # range of quasimomenta
-k_quasimomenta = np.linspace(-0.5, 0.5, 100)
+k_quasimomenta = np.pi / sys_params["X_amplitude"] * np.linspace(-0.5, 0.5, 100)
 
 # band structure
 bands = np.array([
@@ -39,11 +39,8 @@ au2eV = 27.
 plt.title("Band structure of 1D (Mathieu-type) solid state system\nReproduced Fig. 1 from M. Wu et al. Phys. Rev A 91, 043839 (2015)")
 
 for E in bands.T:
-    plt.plot(k_quasimomenta, au2eV * E)
+    plt.plot(sys_params["X_amplitude"] / np.pi * k_quasimomenta, au2eV * E)
 
 plt.xlabel("$k$ (units of $2\pi/ a_0$)")
 plt.ylabel('$\\varepsilon(k)$ (eV)')
 plt.show()
-
-
-

@@ -1,4 +1,5 @@
 import numpy as np
+from types import MethodType, FunctionType
 
 
 class VerletIntegrator:
@@ -20,7 +21,12 @@ class VerletIntegrator:
         """
         # save all attributes
         for name, value in kwargs.items():
-            setattr(self, name, value)
+            # if the value supplied is a function, then dynamically assign it as a method;
+            # otherwise bind it a property
+            if isinstance(value, FunctionType):
+                setattr(self, name, MethodType(value, self, self.__class__))
+            else:
+                setattr(self, name, value)
 
         # Check that all attributes were specified
         try:
@@ -94,7 +100,7 @@ class VerletIntegrator:
         n_particles = self.X.shape[1]
 
         # If not specified, the equally distributed weights are assigned
-        self.weights = (1./n_particles*np.ones(n_particles) if weights==None else np.array(weights))
+        self.weights = (np.ones(n_particles) / n_particles if weights == None else np.array(weights))
 
         assert self.weights.shape == (n_particles,), "Number of weights must be consistent with specified X and P"
 
@@ -186,11 +192,11 @@ if __name__ == '__main__':
 
     # Initiate classical system
     sys = VerletIntegrator(
-        V=lambda x: 10*(1. - np.exp(-0.2*x**2)),
-        grad_V=lambda x: (4*x*np.exp(-0.2*x**2),),
+        V=lambda self, x: 10 * (1. - np.exp(-0.2 * x ** 2)),
+        grad_V=lambda self, x: (4 * x * np.exp(-0.2 * x ** 2), ),
 
-        K=lambda p: 0.5*p**2,
-        grad_K=lambda p: (p,),
+        K=lambda self, p: 0.5 * p ** 2,
+        grad_K=lambda self, p: (p, ),
 
         dt=0.001
     )
@@ -210,7 +216,7 @@ if __name__ == '__main__':
     plt.xlabel('$x$ (a.u.)')
     plt.ylabel('$p$ (a.u.)')
 
-    var_hamiltonian = (max(sys.hamiltonian_average)/min(sys.hamiltonian_average) - 1.)*100
+    var_hamiltonian = 100. * (max(sys.hamiltonian_average) / min(sys.hamiltonian_average) - 1.)
     print("\nHamilton variation %.2e percent\n" % var_hamiltonian)
 
     plt.show()
@@ -267,17 +273,17 @@ if __name__ == '__main__':
     plt.subplot(111, axisbg='grey')
     plt.title('3D Dynamical Billiard (phase-space projection)')
 
-    def grad_V(x1, x2, x3):
-        tmp = 10*np.exp(- x1**2 - 0.2*x2**2 - 0.1*x3**2)
-        return 2*x1*tmp, 0.4*x2*tmp,  0.2*x3*tmp
+    def grad_V(self, x1, x2, x3):
+        tmp = 10 * np.exp(-x1 ** 2 - 0.2 * x2 ** 2 - 0.1 * x3 ** 2)
+        return 2 * x1 * tmp, 0.4 * x2 * tmp,  0.2 * x3 * tmp
 
     # Initiate classical system
     sys = VerletIntegrator(
-        V=lambda x1, x2, x3: 10*(1. - np.exp(- x1**2 - 0.2*x2**2 - 0.1*x3**2)),
+        V=lambda self, x1, x2, x3: 10 * (1. - np.exp(-x1 ** 2 -0.2 * x2 ** 2 -0.1 * x3 ** 2)),
         grad_V=grad_V, # defined above
 
-        K=lambda p1, p2, p3: 0.5*(p1**2 + p2**2 + p3**2),
-        grad_K=lambda p1, p2, p3: (p1, p2, p3),
+        K=lambda self, p1, p2, p3: 0.5 * (p1 ** 2 + p2 ** 2 + p3 ** 2),
+        grad_K=lambda self, p1, p2, p3: (p1, p2, p3),
 
         dt=0.001
     )
@@ -297,7 +303,7 @@ if __name__ == '__main__':
     plt.xlabel('$x_1$ (a.u.)')
     plt.ylabel('$p_1$ (a.u.)')
 
-    var_hamiltonian = (max(sys.hamiltonian_average)/min(sys.hamiltonian_average) - 1.)*100
+    var_hamiltonian = 100. * (max(sys.hamiltonian_average) / min(sys.hamiltonian_average) - 1.)
     print("\nHamilton variation %.2e percent\n" % var_hamiltonian)
 
     plt.show()

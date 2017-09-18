@@ -110,7 +110,7 @@ class DensityMatrix:
         # construct the coordinate dependent phase containing the dissipator as well as coherent propagator
         F = "1.j * (" + self.V.format(X="X_prime") + " - " + self.V.format(X="X") + ") + "\
             + self.A.format(X="X") + " * conj(" + self.A.format(X="X_prime") + ") "\
-            "- 0.5 * abs(" + self.A.format(X="X_prime") + ") - 0.5 * abs(" + self.A.format(X="X") + ") "
+            "- 0.5 * abs(" + self.A.format(X="X_prime") + ") ** 2 - 0.5 * abs(" + self.A.format(X="X") + ") ** 2"
 
         # numexpr code to calculate (-)**(k + k_prime) * exp(0.5 * dt * F)
         self.code_expV = "(%s) * (%s) * (-1) ** (k + k_prime) * exp(0.5 * dt * (%s))" % (
@@ -163,7 +163,7 @@ class DensityMatrix:
         :param time_steps: number of self.dt time increments to make
         :return: self.rho
             """
-        for _ in xrange(time_steps):
+        for _ in range(time_steps):
             # make a half step in time
             self.t += 0.5 * self.dt
 
@@ -274,16 +274,6 @@ class DensityMatrix:
 
 if __name__ == '__main__':
 
-
-    # load tools for creating animation
-    import sys
-
-    if sys.platform == 'darwin':
-        # only for MacOS
-        import matplotlib
-
-        matplotlib.use('TKAgg')
-
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation, writers
 
@@ -365,7 +355,7 @@ if __name__ == '__main__':
             :param self:
             :return: image object
             """
-            self.img.set_array([[0]])
+            self.img.set_array([[]])
             return self.img,
 
         def __call__(self, frame_num):

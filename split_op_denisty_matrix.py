@@ -9,10 +9,12 @@ class DensityMatrix:
     """
     The second-order split-operator propagator for the Lindblad master equation
 
-    d \rho / dt = i [\rho, H(t)] + A \rho A^{\dagger} - 1/2 \rho A^{\dagger} A - 1/2 A^{\dagger} A \rho
+    d \\rho / dt = i [\\rho, H(t)]
+                + A \\rho A^{\dagger} - 1/2 \\rho A^{\dagger} A - 1/2 A^{\dagger} A \\rho
+                + B \\rho B^{\dagger} - 1/2 \\rho B^{\dagger} B - 1/2 B^{\dagger} B \\rho
 
     in the coordinate representation  with the time-dependent Hamiltonian H = K(p, t) + V(x, t)
-    and the coordinate dependent dissipator A = A(x, t).
+    and the coordinate dependent dissipator A = A(x, t) and the momentum dependent dissipator B = B(p, t).
     """
     def __init__(self, **kwargs):
         """
@@ -21,8 +23,13 @@ class DensityMatrix:
             X_amplitude - maximum value of the coordinates
             V - potential energy (as a string to be evaluated by numexpr)
             K - momentum dependent part of the hamiltonian (as a string to be evaluated by numexpr)
+
             A - a coordinate dependent Lindblad dissipator (as a string to be evaluated by numexpr)
             RHS_P_A (optional) -- the correction to the second Ehrenfest theorem due to A
+
+            B - a momentum dependent Lindblad dissipator (as a string to be evaluated by numexpr)
+            RHS_X_B (optional) -- the correction to the first Ehrenfest theorem due to B
+
             diff_V (optional) -- the derivative of the potential energy for the Ehrenfest theorem calculations
             diff_K (optional) -- the derivative of the kinetic energy for the Ehrenfest theorem calculations
             t (optional) - initial value of time
@@ -64,7 +71,14 @@ class DensityMatrix:
         try:
             self.A
         except AttributeError:
-            raise AttributeError("Coordinate dependent Lindblad dissipator (A) was not specified")
+            self.A = self.RHS_P_A = "0."
+            print("Warning: Coordinate dependent Lindblad dissipator (A) was not specified so it is set to zero")
+
+        try:
+            self.B
+        except AttributeError:
+            self.B = self.RHS_X_B = "0."
+            print("Warning: Momentum dependent Lindblad dissipator (B) was not specified so it is set to zero")
 
         try:
             self.dt
@@ -107,34 +121,61 @@ class DensityMatrix:
         # allocate an axillary array needed for propagation
         self.expV = np.zeros_like(self.rho)
 
+        # PATCH: This line is because of a bug in numexpr
+        phase_X = (
+            "1j * (({V_X_prime}) - ({V_X})) "
+            if self.A == "0." else
+            "1j * (({V_X_prime}) - ({V_X})) "
+            "+ ({A_X}) * conj({A_X_prime}) - 0.5 * abs({A_X}) ** 2 - 0.5 * abs({A_X_prime}) ** 2"
+        )
+
         # construct the coordinate dependent phase containing the dissipator as well as coherent propagator
-        F = "1.j * (" + self.V.format(X="X_prime") + " - " + self.V.format(X="X") + ") + "\
-            + self.A.format(X="X") + " * conj(" + self.A.format(X="X_prime") + ") "\
-            "- 0.5 * abs(" + self.A.format(X="X_prime") + ") ** 2 - 0.5 * abs(" + self.A.format(X="X") + ") ** 2"
+        phase_X = phase_X.format(
+                V_X_prime=self.V.format(X="X_prime"),
+                V_X=self.V.format(X="X"),
+                A_X_prime=self.A.format(X="X_prime"),
+                A_X=self.A.format(X="X"),
+        )
 
         # numexpr code to calculate (-)**(k + k_prime) * exp(0.5 * dt * F)
         self.code_expV = "(%s) * (%s) * (-1) ** (k + k_prime) * exp(0.5 * dt * (%s))" % (
-            self.abs_boundary.format(X="X"), self.abs_boundary.format(X="X_prime"), F
+            self.abs_boundary.format(X="X"), self.abs_boundary.format(X="X_prime"), phase_X
+        )
+
+        # PATCH: This line is because of a bug in numexpr
+        phase_P = (
+            "1j * (({K_P_prime}) - ({K_P})) "
+            if self.B == "0." else
+            "1j * (({K_P_prime}) - ({K_P})) "
+            "+ ({B_P}) * conj({B_P_prime}) - 0.5 * abs({B_P}) ** 2 - 0.5 * abs({B_P_prime}) ** 2"
+        )
+
+        # construct the coordinate dependent phase containing the dissipator as well as coherent propagator
+        phase_P = phase_P.format(
+                K_P_prime=self.K.format(P="P_prime"),
+                K_P=self.K.format(P="P"),
+                B_P_prime=self.B.format(P="P_prime"),
+                B_P=self.B.format(P="P"),
         )
 
         # numexpr code to calculate rho * exp(1j * dt * K)
-        self.code_expK = "rho * exp(1j * dt * ((%s) - (%s)))" % (
-            self.K.format(P="P_prime"), self.K.format(P="P")
-        )
+        self.code_expK = "rho * exp(dt * (%s))" % phase_P
+
 
         # Check whether the necessary terms are specified to calculate the first-order Ehrenfest theorems
         try:
             # numexpr codes to calculate the First Ehrenfest theorems
-            self.code_P_average_RHS = "sum(((%s) - (%s)) * density)" % (
+            self.code_P_average_RHS = "sum((-(%s) + (%s)) * density)" % (
                 self.diff_V.format(X="X"), self.RHS_P_A.format(X="X")
             )
             self.code_V_average = "sum((%s) * density)" % self.V.format(X="X")
             self.code_X_average = "sum(X * density)"
 
-            self.code_X_average_RHS = "sum((%s) * density)" % self.diff_K.format(P="P")
+            self.code_X_average_RHS = "sum(((%s) + (%s)) * density)" % (
+                self.diff_K.format(P="P"), self.RHS_X_B.format(P="P")
+            )
             self.code_K_average = "sum((%s) * density)" % self.K.format(P="P")
             self.code_P_average = "sum(P * density)"
-
 
             # Lists where the expectation values of X and P
             self.X_average = []
@@ -207,7 +248,7 @@ class DensityMatrix:
                 self.dX * ne.evaluate(self.code_X_average, local_dict=vars(self)).real
             )
             self.P_average_RHS.append(
-                -self.dX * ne.evaluate(self.code_P_average_RHS, local_dict=vars(self)).real
+                self.dX * ne.evaluate(self.code_P_average_RHS, local_dict=vars(self)).real
             )
 
             # save the potential energy
@@ -323,13 +364,20 @@ if __name__ == '__main__':
                 X_gridDIM=256,
                 X_amplitude=5.,
 
-                # dissipator
-                alpha=np.random.uniform(0.1, 0.5),
+                # dissipators
+                alpha=np.random.uniform(0.1, 0.3),
+                beta=np.random.uniform(-0.02, 0.02),
+
                 R=np.random.uniform(-10., 10.),
+                S=np.random.uniform(-1., 1.),
 
+                # coordinate dependant dissipator and its correction to the Ehrenfest theorem
                 A="R * exp(-1j * alpha * 0.25 * {X} ** 4 / R ** 2)",
-
                 RHS_P_A="-alpha * {X} ** 3",
+
+                # momentum dependant dissipator and its correction to the Ehrenfest theorem
+                B="S * {P} * exp(-1j * beta * 0.5 * {P} ** 2 / S ** 2)",
+                RHS_X_B="beta * {P} ** 3",
 
                 # kinetic energy part of the hamiltonian
                 K="0.5 * {P} ** 2",
@@ -402,7 +450,7 @@ if __name__ == '__main__':
     plt.title("The first Ehrenfest theorem verification")
 
     plt.plot(times, np.gradient(quant_sys.X_average, dt), 'r-', label='$d\\langle \\hat{x} \\rangle/dt$')
-    plt.plot(times, quant_sys.X_average_RHS, 'b--', label='$\\langle \\hat{p} \\rangle$')
+    plt.plot(times, quant_sys.X_average_RHS, 'b--', label='RHS')
 
     plt.legend()
     plt.xlabel('time $t$ (a.u.)')
@@ -411,7 +459,7 @@ if __name__ == '__main__':
     plt.title("The second Ehrenfest theorem verification")
 
     plt.plot(times, np.gradient(quant_sys.P_average, dt), 'r-', label='$d\\langle \\hat{p} \\rangle/dt$')
-    plt.plot(times, quant_sys.P_average_RHS, 'b--', label='$\\langle -\\partial\\hat{V}/\\partial\\hat{x} \\rangle$')
+    plt.plot(times, quant_sys.P_average_RHS, 'b--', label='RHS')
 
     plt.legend()
     plt.xlabel('time $t$ (a.u.)')

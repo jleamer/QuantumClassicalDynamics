@@ -1,7 +1,6 @@
 import numpy as np
 import numexpr as ne
 from scipy import fftpack # Tools for fourier transform
-from scipy import linalg # Linear algebra for dense matrix
 from types import MethodType, FunctionType
 
 
@@ -164,18 +163,23 @@ class DensityMatrix:
 
         # Check whether the necessary terms are specified to calculate the first-order Ehrenfest theorems
         try:
+            # Allocate a copy of the wavefunction for storing the wavefunction in the momentum representation
+            self.rho_p = np.zeros_like(self.rho)
+
             # numexpr codes to calculate the First Ehrenfest theorems
+            self.code_V_average = "sum((%s) * density)" % self.V.format(X="X")
+            self.code_K_average = "sum((%s) * density)" % self.K.format(P="P")
+
+            self.code_X_average = "sum(X * density)"
+            self.code_P_average = "sum(P * density)"
+
             self.code_P_average_RHS = "sum((-(%s) + (%s)) * density)" % (
                 self.diff_V.format(X="X"), self.RHS_P_A.format(X="X")
             )
-            self.code_V_average = "sum((%s) * density)" % self.V.format(X="X")
-            self.code_X_average = "sum(X * density)"
 
             self.code_X_average_RHS = "sum(((%s) + (%s)) * density)" % (
                 self.diff_K.format(P="P"), self.RHS_X_B.format(P="P")
             )
-            self.code_K_average = "sum((%s) * density)" % self.K.format(P="P")
-            self.code_P_average = "sum(P * density)"
 
             # Lists where the expectation values of X and P
             self.X_average = []
@@ -187,9 +191,6 @@ class DensityMatrix:
 
             # List where the expectation value of the Hamiltonian will be calculated
             self.hamiltonian_average = []
-
-            # Allocate a copy of the wavefunction for storing the wavefunction in the momentum representation
-            self.rho_p = np.zeros_like(self.rho)
 
             # Flag requesting tha the Ehrenfest theorem calculations
             self.isEhrenfest = True
@@ -306,6 +307,37 @@ class DensityMatrix:
         self.rho /= self.rho.trace() * self.dX
 
         return self
+
+    def get_purity(self):
+        """
+        :return: The purity of the density matrix (self.rho)
+        """
+        return ne.evaluate("sum(abs(rho) ** 2)", local_dict=vars(self)) * self.dX ** 2
+
+    def get_energy(self):
+        """
+        :return: the expectation value of the Hamiltonian with respect to the state (self.rho)
+        """
+        # extract the coordinate density and give it the shape of self.X
+        self.density = self.rho.diagonal().reshape(self.X.shape)
+
+        H = self.dX * ne.evaluate(self.code_V_average, local_dict=vars(self)).real
+
+        # calculate density in the momentum representation
+        ne.evaluate("(-1) ** (k + k_prime) * rho", local_dict=vars(self), out=self.rho_p)
+
+        self.rho_p = fftpack.fft(self.rho_p, axis=0, overwrite_x=True)
+        self.rho_p = fftpack.ifft(self.rho_p, axis=1, overwrite_x=True)
+
+        # normalize
+        self.rho_p /= self.rho_p.trace() * self.dP
+
+        self.density = self.rho_p.diagonal().reshape(self.P.shape)
+
+        # add the kinetic energy to get the hamiltonian
+        H += self.dP * ne.evaluate(self.code_K_average, local_dict=vars(self)).real
+
+        return H
 
 ##############################################################################
 #

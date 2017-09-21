@@ -1,7 +1,10 @@
 import numpy as np
 import numexpr as ne
-from scipy import fftpack # Tools for fourier transform
 from types import MethodType, FunctionType
+import pickle
+# in other codes, we have used scipy.fftpack to perform Fourier Transforms.
+# In this code, we will use pyfftw, which is more suited for efficient large data
+import pyfftw
 
 
 class DensityMatrix:
@@ -96,6 +99,72 @@ class DensityMatrix:
             print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
             self.abs_boundary = "1."
 
+        ########################################################################################
+        #
+        #   Initialize Fourier transform for efficient calculations
+        #
+        ########################################################################################
+
+        # Load FFTW wisdom if saved before
+        try:
+            with open('fftw_wisdom', 'rb') as f:
+                pyfftw.import_wisdom(pickle.load(f))
+
+            print("\nFFTW wisdom has been loaded\n")
+        except IOError:
+            pass
+
+        # allocate the array for density matrix
+        self.rho = pyfftw.empty_aligned((self.X_gridDIM, self.X_gridDIM), dtype=np.complex)
+
+        #  FFTW settings to achive good performace. For details see
+        # https://hgomersall.github.io/pyFFTW/pyfftw/pyfftw.html#pyfftw.FFTW
+        fftw_flags = ('FFTW_MEASURE','FFTW_DESTROY_INPUT')
+
+        # how many threads to use for parallelized calculation of FFT.
+        # Use the same number of threads as in numexpr
+        fftw_nthreads = ne.nthreads
+
+        # Create plan to pefrom FFT over the zeroth axis. It is equivalent to
+        #   fftpack.fft(self.rho, axis=0, overwrite_x=True)
+        self.rho_fft_ax0 = pyfftw.FFTW(
+            self.rho, self.rho,
+            axes=(0,),
+            direction='FFTW_FORWARD',
+            flags=fftw_flags,
+            threads=fftw_nthreads
+        )
+
+        self.rho_fft_ax1 = pyfftw.FFTW(
+            self.rho, self.rho,
+            axes=(1,),
+            direction='FFTW_FORWARD',
+            flags=fftw_flags,
+            threads=fftw_nthreads
+        )
+
+        self.rho_ifft_ax0 = pyfftw.FFTW(
+            self.rho, self.rho,
+            axes=(0,),
+            direction='FFTW_BACKWARD',
+            flags=fftw_flags,
+            threads=fftw_nthreads
+        )
+
+        self.rho_ifft_ax1 = pyfftw.FFTW(
+            self.rho, self.rho,
+            axes=(1,),
+            direction='FFTW_BACKWARD',
+            flags=fftw_flags,
+            threads=fftw_nthreads
+        )
+
+        # Save FFTW wisdom
+        with open('fftw_wisdom', 'wb') as f:
+            pickle.dump(pyfftw.export_wisdom(), f)
+
+        ########################################################################################
+
         # get coordinate step size
         self.dX = 2. * self.X_amplitude / self.X_gridDIM
 
@@ -114,22 +183,12 @@ class DensityMatrix:
         self.P = P[:, np.newaxis]
         self.P_prime = P[np.newaxis, :]
 
-        # allocate the array for density matrix
-        self.rho = np.zeros((self.X_gridDIM, self.X_gridDIM), dtype=np.complex)
-
         # allocate an axillary array needed for propagation
         self.expV = np.zeros_like(self.rho)
 
-        # PATCH: This line is because of a bug in numexpr
-        phase_X = (
-            "1j * (({V_X_prime}) - ({V_X})) "
-            if self.A == "0." else
-            "1j * (({V_X_prime}) - ({V_X})) "
-            "+ ({A_X}) * conj({A_X_prime}) - 0.5 * abs({A_X}) ** 2 - 0.5 * abs({A_X_prime}) ** 2"
-        )
-
         # construct the coordinate dependent phase containing the dissipator as well as coherent propagator
-        phase_X = phase_X.format(
+        phase_X = "1j * (({V_X_prime}) - ({V_X})) " \
+                  "+ ({A_X}) * conj({A_X_prime}) - 0.5 * abs({A_X}) ** 2 - 0.5 * abs({A_X_prime}) ** 2".format(
                 V_X_prime=self.V.format(X="X_prime"),
                 V_X=self.V.format(X="X"),
                 A_X_prime=self.A.format(X="X_prime"),
@@ -141,16 +200,9 @@ class DensityMatrix:
             self.abs_boundary.format(X="X"), self.abs_boundary.format(X="X_prime"), phase_X
         )
 
-        # PATCH: This line is because of a bug in numexpr
-        phase_P = (
-            "1j * (({K_P_prime}) - ({K_P})) "
-            if self.B == "0." else
-            "1j * (({K_P_prime}) - ({K_P})) "
-            "+ ({B_P}) * conj({B_P_prime}) - 0.5 * abs({B_P}) ** 2 - 0.5 * abs({B_P_prime}) ** 2"
-        )
-
         # construct the coordinate dependent phase containing the dissipator as well as coherent propagator
-        phase_P = phase_P.format(
+        phase_P = "1j * (({K_P_prime}) - ({K_P})) " \
+                  "+ ({B_P}) * conj({B_P_prime}) - 0.5 * abs({B_P}) ** 2 - 0.5 * abs({B_P_prime}) ** 2".format(
                 K_P_prime=self.K.format(P="P_prime"),
                 K_P=self.K.format(P="P"),
                 B_P_prime=self.B.format(P="P_prime"),
@@ -163,8 +215,25 @@ class DensityMatrix:
 
         # Check whether the necessary terms are specified to calculate the first-order Ehrenfest theorems
         try:
-            # Allocate a copy of the wavefunction for storing the wavefunction in the momentum representation
-            self.rho_p = np.zeros_like(self.rho)
+            # Allocate a copy of the wavefunction for storing the density matrix in the momentum representation
+            self.rho_p = pyfftw.empty_aligned(self.rho.shape, dtype=self.rho.dtype)
+
+            # Create FFT plans to operate on self.rho_p
+            self.rho_p_fft_ax0 = pyfftw.FFTW(
+                self.rho_p, self.rho_p,
+                axes=(0,),
+                direction='FFTW_FORWARD',
+                flags=fftw_flags,
+                threads=fftw_nthreads
+            )
+
+            self.rho_p_ifft_ax1 = pyfftw.FFTW(
+                self.rho_p, self.rho_p,
+                axes=(1,),
+                direction='FFTW_BACKWARD',
+                flags=fftw_flags,
+                threads=fftw_nthreads
+            )
 
             # numexpr codes to calculate the First Ehrenfest theorems
             self.code_V_average = "sum((%s) * density)" % self.V.format(X="X")
@@ -214,14 +283,14 @@ class DensityMatrix:
             self.rho *= self.expV
 
             # going to the momentum representation
-            self.rho = fftpack.fft(self.rho, axis=0, overwrite_x=True)
-            self.rho = fftpack.ifft(self.rho, axis=1, overwrite_x=True)
+            self.rho_fft_ax0()
+            self.rho_ifft_ax1()
 
             ne.evaluate(self.code_expK, local_dict=vars(self), out=self.rho)
 
             # going back to the coordinate representation
-            self.rho = fftpack.ifft(self.rho, axis=0, overwrite_x=True)
-            self.rho = fftpack.fft(self.rho, axis=1, overwrite_x=True)
+            self.rho_ifft_ax0()
+            self.rho_fft_ax1()
 
             self.rho *= self.expV
 
@@ -259,9 +328,8 @@ class DensityMatrix:
 
             # calculate density in the momentum representation
             ne.evaluate("(-1) ** (k + k_prime) * rho", local_dict=vars(self), out=self.rho_p)
-
-            self.rho_p = fftpack.fft(self.rho_p, axis=0, overwrite_x=True)
-            self.rho_p = fftpack.ifft(self.rho_p, axis=1, overwrite_x=True)
+            self.rho_p_fft_ax0()
+            self.rho_p_ifft_ax1()
 
             # normalize
             self.rho_p /= self.rho_p.trace() * self.dP
@@ -325,9 +393,8 @@ class DensityMatrix:
 
         # calculate density in the momentum representation
         ne.evaluate("(-1) ** (k + k_prime) * rho", local_dict=vars(self), out=self.rho_p)
-
-        self.rho_p = fftpack.fft(self.rho_p, axis=0, overwrite_x=True)
-        self.rho_p = fftpack.ifft(self.rho_p, axis=1, overwrite_x=True)
+        self.rho_p_fft_ax0()
+        self.rho_p_ifft_ax1()
 
         # normalize
         self.rho_p /= self.rho_p.trace() * self.dP

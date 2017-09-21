@@ -1,4 +1,4 @@
-from split_op_denisty_matrix import DensityMatrix, fftpack, np, ne
+from split_op_denisty_matrix import DensityMatrix, np, ne
 
 
 class BlochPropagation(DensityMatrix):
@@ -44,14 +44,14 @@ class BlochPropagation(DensityMatrix):
             self.rho *= bloch_expV
 
             # going to the momentum representation
-            self.rho = fftpack.fft(self.rho, axis=0, overwrite_x=True)
-            self.rho = fftpack.ifft(self.rho, axis=1, overwrite_x=True)
+            self.rho_fft_ax0()
+            self.rho_ifft_ax1()
 
             self.rho *= bloch_expK
 
             # going back to the coordinate representation
-            self.rho = fftpack.ifft(self.rho, axis=0, overwrite_x=True)
-            self.rho = fftpack.fft(self.rho, axis=1, overwrite_x=True)
+            self.rho_ifft_ax0()
+            self.rho_fft_ax1()
 
             self.rho *= bloch_expV
 

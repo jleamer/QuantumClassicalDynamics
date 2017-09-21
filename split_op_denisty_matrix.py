@@ -7,7 +7,7 @@ import pickle
 import pyfftw
 
 
-class DensityMatrix:
+class DensityMatrix(object):
     """
     The second-order split-operator propagator for the Lindblad master equation
 
@@ -405,6 +405,16 @@ class DensityMatrix:
         H += self.dP * ne.evaluate(self.code_K_average, local_dict=vars(self)).real
 
         return H
+
+    def __setattr__(self, key, value):
+        """
+        Make sure that attributes are not overwritten except some specific variables
+        """
+        assert key in {"t", "rho", "rho_p", "density"} or key not in vars(self), \
+            "Attribute (%s) already belongs to the instance of this class. " \
+            "You may want to use another name for the attribute." % key
+
+        super(DensityMatrix, self).__setattr__(key, value)
 
 ##############################################################################
 #

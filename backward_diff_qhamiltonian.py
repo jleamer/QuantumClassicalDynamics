@@ -55,8 +55,8 @@ class BackwardDiffQHamiltonian:
         self.Hamiltonian *= -0.5 / (self.dX ** 2)
 
         # Add diagonal potential energy
-        V = ne.evaluate(self.V, local_dict=self.__dict__)
-        self.Hamiltonian = self.Hamiltonian + diags(V, 0)
+        V = ne.evaluate(self.V, local_dict=vars(self))
+        self.Hamiltonian += diags(V, 0)
 
 ##############################################################################
 #
@@ -79,8 +79,8 @@ if __name__ == '__main__':
         # get energies
         energies = linalg.eigvals(harmonic_osc.Hamiltonian.toarray())
 
-        # sort energies by real part
+        # get energies using the dense linear algebra
         energies = energies[np.argsort(energies.real)]
 
-        print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
-        print energies[:20]
+        print("\n\nFirst energies for harmonic oscillator with omega = {}".format(omega))
+        print(energies[:20])

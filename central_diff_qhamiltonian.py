@@ -1,8 +1,7 @@
 import numpy as np
 import numexpr as ne
 from scipy.sparse import diags # Construct a sparse matrix from diagonals
-#from scipy.sparse import linalg # Linear algebra for sparse matrix
-from scipy import linalg # Linear algebra for dense matrix
+from scipy.sparse import linalg # Linear algebra for sparse matrix
 from types import MethodType, FunctionType
 
 
@@ -57,8 +56,8 @@ class CentralDiffQHamiltonian:
         self.Hamiltonian *= -0.5/(self.dX**2)
 
         # Add diagonal potential energy
-        V = ne.evaluate(self.V, local_dict=self.__dict__)
-        self.Hamiltonian = self.Hamiltonian + diags(V, 0)
+        V = ne.evaluate(self.V, local_dict=vars(self))
+        self.Hamiltonian += diags(V, 0)
 
     def get_eigenstate(self, n):
         """
@@ -90,21 +89,18 @@ class CentralDiffQHamiltonian:
         except AttributeError:
             # eigenstates have not been calculated so
             # get real sorted energies and underlying wavefunctions
-            # using specialized function for Hermitian matrices
-            self.energies, self.eigenstates = linalg.eigh(self.Hamiltonian.toarray())
+            # using specialized function for sparce Hermitian matrices
+            self.energies, self.eigenstates = linalg.eigsh(self.Hamiltonian, which='SM', k=20)
 
-            # extract real part of the energies
-            self.energies = np.real(self.energies)
-
-            # covert to the formal convenient for storage
-            self.eigenstates = np.ascontiguousarray(self.eigenstates.T.real)
+            # transpose for convenience
+            self.eigenstates = self.eigenstates.T
 
             # normalize each eigenvector
             for psi in self.eigenstates:
-                psi /= linalg.norm(psi) * np.sqrt(self.dX)
+                psi /= np.linalg.norm(psi) * np.sqrt(self.dX)
 
             # check that the ground state is non negative
-            np.abs(self.eigenstates[0], out=self.eigenstates[0])
+            self.eigenstates[0] = np.abs(self.eigenstates[0])
 
         return self
 
@@ -134,10 +130,10 @@ if __name__ == '__main__':
         for n in range(4):
             plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n), label=str(n))
 
-        print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
-        print(harmonic_osc.energies[:20])
+        print("\n\nFirst energies for harmonic oscillator with omega = {}".format(omega))
+        print(harmonic_osc.energies)
 
-        plt.title("Eigenfunctions for harmonic oscillator with omega = %.2f (a.u.)" % omega)
+        plt.title("Eigenfunctions for harmonic oscillator with omega = {} (a.u.)".format(omega))
         plt.xlabel('$x$ (a.u.)')
         plt.ylabel('wave functions ($\\psi_n(x)$)')
         plt.legend()

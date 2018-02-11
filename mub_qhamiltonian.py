@@ -72,7 +72,7 @@ class MUBQHamiltonian:
 
         # Construct the momentum dependent part
         self.Hamiltonian = np.diag(
-            ne.evaluate(self.K, local_dict=self.__dict__)
+            ne.evaluate(self.K, local_dict=vars(self))
         )
         self.Hamiltonian *= minus
         self.Hamiltonian = fftpack.fft(self.Hamiltonian, axis=1, overwrite_x=True)
@@ -81,7 +81,7 @@ class MUBQHamiltonian:
 
         # Add diagonal potential energy
         self.Hamiltonian += np.diag(
-            ne.evaluate(self.V, local_dict=self.__dict__)
+            ne.evaluate(self.V, local_dict=vars(self))
         )
 
     def get_eigenstate(self, n):
@@ -127,9 +127,8 @@ class MUBQHamiltonian:
             for psi in self.eigenstates:
                 psi /= linalg.norm(psi) * np.sqrt(self.dX)
 
-            # check that the ground state is not negative
-            if self.eigenstates[0].real.sum() < 0:
-                self.eigenstates *= -1
+            # Make sure that the ground state is non negative
+            np.abs(self.eigenstates[0], out=self.eigenstates[0])
 
         return self
 
@@ -159,10 +158,10 @@ if __name__ == '__main__':
         for n in range(4):
             plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n).real, label=str(n))
 
-        print("\n\nFirst energies for harmonic oscillator with omega = %f" % omega)
+        print("\n\nFirst energies for harmonic oscillator with omega = {}".format(omega))
         print(harmonic_osc.energies[:20])
 
-        plt.title("Eigenfunctions for harmonic oscillator with omega = %.2f (a.u.)" % omega)
+        plt.title("Eigenfunctions for harmonic oscillator with omega = {} (a.u.)".format(omega))
         plt.xlabel('$x$ (a.u.)')
         plt.ylabel('wave functions ($\\psi_n(x)$)')
         plt.legend()

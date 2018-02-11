@@ -89,7 +89,7 @@ class CentralDiffQHamiltonian:
         except AttributeError:
             # eigenstates have not been calculated so
             # get real sorted energies and underlying wavefunctions
-            # using specialized function for sparce Hermitian matrices
+            # using specialized function for sparse Hermitian matrices
             self.energies, self.eigenstates = linalg.eigsh(self.Hamiltonian, which='SM', k=20)
 
             # transpose for convenience
@@ -99,8 +99,8 @@ class CentralDiffQHamiltonian:
             for psi in self.eigenstates:
                 psi /= np.linalg.norm(psi) * np.sqrt(self.dX)
 
-            # check that the ground state is non negative
-            self.eigenstates[0] = np.abs(self.eigenstates[0])
+            # Make sure that the ground state is non negative
+            np.abs(self.eigenstates[0], out=self.eigenstates[0])
 
         return self
 
@@ -131,6 +131,9 @@ if __name__ == '__main__':
             plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n), label=str(n))
 
         print("\n\nFirst energies for harmonic oscillator with omega = {}".format(omega))
+
+        # set precision for printing arrays
+        np.set_printoptions(precision=4)
         print(harmonic_osc.energies)
 
         plt.title("Eigenfunctions for harmonic oscillator with omega = {} (a.u.)".format(omega))

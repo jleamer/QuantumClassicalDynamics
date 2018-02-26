@@ -22,7 +22,7 @@ quant_sys = SplitOpSchrodinger1D(**quant_sys_params)
 quant_sys.set_wavefunction("exp(-0.4 * (X + 2.5) ** 2)")
 
 # Save the evolution
-wavefunctions = [quant_sys.propagate().copy() for _ in xrange(10000)]
+wavefunctions = [quant_sys.propagate().copy() for _ in range(10000)]
 wavefunctions = np.array(wavefunctions)
 
 #############################################################################
@@ -39,9 +39,9 @@ wavefunctions_fft = fftpack.ifft(
 )
 wavefunctions_fft *= minus
 
-# energy axis
+# energy axis (as prescribed by Method 1 for calculating Fourier transform
 energy_range = (k - k.size / 2) * np.pi / (0.5 * quant_sys.dt * k.size)
-print("Energy resolution (step size) %f (a.u.)" % (energy_range[1] - energy_range[0]))
+print("Energy resolution (step size) {:f} (a.u.)".format(energy_range[1] - energy_range[0]))
 
 plt.subplot(211)
 plt.title('$\\mathcal{F}_{t \\to E}^{-1}[ \\Psi(x, t) ]$ using FFT')
@@ -50,7 +50,9 @@ plt.title('$\\mathcal{F}_{t \\to E}^{-1}[ \\Psi(x, t) ]$ using FFT')
 abs_wavefunctions_fft = np.abs(wavefunctions_fft)
 abs_wavefunctions_fft /= abs_wavefunctions_fft.max(axis=1)[:, np.newaxis]
 
+
 extent = [quant_sys.X[0], quant_sys.X[-1], energy_range[0], energy_range[-1]]
+
 plt.imshow(abs_wavefunctions_fft, extent=extent, origin='lower', aspect=0.1)
 plt.ylabel('energy, $E$ (a.u.)')
 plt.ylim(0., 60.)
@@ -135,10 +137,10 @@ for indx in [3, 30]:
     # normalize the underlying density
     density = np.abs(density) ** 2
     density /= density.sum() * quant_sys.dX
-    plt.plot(quant_sys.X, density, label="approx %d" % indx)
+    plt.plot(quant_sys.X, density, label="approx {}".format(indx))
 
     # plot the exact eigenstate
-    plt.plot(quant_sys.X, np.abs(exact.eigenstates[indx])**2, label='exact %d' % indx)
+    plt.plot(quant_sys.X, np.abs(exact.eigenstates[indx])**2, label='exact {}'.format(indx))
 
 plt.legend()
 plt.xlabel('$x$ (a.u.)')

@@ -20,8 +20,8 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
         """
         # since there is no time dependence (self.t) during the imaginary time propagation
         # pre-calculate imaginary time exponents of the potential and kinetic energy
-        img_expV = ne.evaluate("(-1) ** k * exp(-0.5 * dt * (%s))" % self.V, local_dict=self.__dict__)
-        img_expK = ne.evaluate("exp(-dt * (%s))" % self.K, local_dict=self.__dict__)
+        img_expV = ne.evaluate("(-1) ** k * exp(-0.5 * dt * ({}))".format(self.V), local_dict=vars(self))
+        img_expK = ne.evaluate("exp(-dt * ({}))".format(self.K), local_dict=vars(self))
 
         # initialize the list where the stationary states will be saved
         self.stationary_states = []
@@ -29,16 +29,18 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
         # boolean flag determining the parity of wavefunction
         even = True
 
-        for n in xrange(nstates):
+        for n in range(nstates):
 
-            # allocate and initialize the wavefunction depending on the parity
+            # allocate and initialize the wavefunction depending on the parity.
+            # Note that you do not have to be fancy and can choose any initial guess (even random).
+            # the more reasonable initial guess, the faster the convergence.
             wavefunction = ne.evaluate(
                 "exp(-X ** 2)" if even else "X * exp(-X ** 2)",
-                local_dict=self.__dict__,
+                local_dict=vars(self),
             )
             even = not even
 
-            for _ in xrange(nsteps):
+            for _ in range(nsteps):
                 #################################################################################
                 #
                 #   Make an imaginary time step
@@ -87,14 +89,6 @@ class ImgTimePropagation(SplitOpSchrodinger1D):
 if __name__ == '__main__':
 
     # load tools for creating animation
-    import sys
-
-    if sys.platform == 'darwin':
-        # only for MacOS
-        import matplotlib
-
-        matplotlib.use('TKAgg')
-
     import matplotlib.pyplot as plt
 
     # specify parameters separately
@@ -125,17 +119,20 @@ if __name__ == '__main__':
     plt.semilogy(
         atom_sys.X,
         atom_sys.wavefunction.real,
-        'r-', label='state via img-time'
+        'r-',
+        label='state via img-time'
     )
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_sys.propagate(10000)),
-        'b--', label='state after propagation'
+        'b--',
+        label='state after propagation'
     )
     plt.semilogy(
         atom_sys.X,
         atom_mub.get_eigenstate(0).real,
-        'g-.', label='state via MUB'
+        'g-.',
+        label='state via MUB'
     )
     plt.xlabel("$x$ (a.u.)")
     plt.legend(loc='lower center')
@@ -149,17 +146,20 @@ if __name__ == '__main__':
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_sys.wavefunction),
-        'r-', label='state via img-time'
+        'r-',
+        label='state via img-time'
     )
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_sys.propagate(10000)),
-        'b--', label='state after propagation'
+        'b--',
+        label='state after propagation'
     )
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_mub.get_eigenstate(1)),
-        'g-.', label='state via MUB'
+        'g-.',
+        label='state via MUB'
     )
     plt.ylim([1e-6, 1e0])
     plt.xlabel("$x$ (a.u.)")
@@ -179,12 +179,14 @@ if __name__ == '__main__':
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_sys.propagate(10000)),
-        'b--', label='state after propagation'
+        'b--',
+        label='state after propagation'
     )
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_mub.get_eigenstate(2)),
-        'g-.', label='state via MUB'
+        'g-.',
+        label='state via MUB'
     )
     plt.ylim([1e-6, 1e0])
     plt.xlabel("$x$ (a.u.)")
@@ -199,17 +201,20 @@ if __name__ == '__main__':
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_sys.wavefunction),
-        'r-', label='state via img-time'
+        'r-',
+        label='state via img-time'
     )
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_sys.propagate(10000)),
-        'b--', label='state after propagation'
+        'b--',
+        label='state after propagation'
     )
     plt.semilogy(
         atom_sys.X,
         np.abs(atom_mub.get_eigenstate(3)),
-        'g-.', label='state via MUB'
+        'g-.',
+        label='state via MUB'
     )
     plt.ylim([1e-6, 1e0])
     plt.xlabel("$x$ (a.u.)")

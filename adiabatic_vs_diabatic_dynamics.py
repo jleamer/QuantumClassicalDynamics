@@ -4,13 +4,6 @@ In particular, we will illustrate the adiabatic theorem that states:
 A physical system remains in its instantaneous eigenstate if a given perturbation is acting slowly enough.
 """
 import numpy as np
-
-import sys
-if sys.platform == 'darwin':
-        # only for MacOS
-        import matplotlib
-        matplotlib.use('TKAgg')
-
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation # tools for creating animation
 from imag_time_propagation import ImgTimePropagation
@@ -89,16 +82,12 @@ class DynamicVisualized:
         #diabatic_ax.set_ylabel("probability density")
 
         # Bundle all graphical objects
-        self.lines = (self.ad_instant_eigns_line, self.adiabatic_line, self.d_instant_eigns_line, self.diabatic_line)
-
-    def empty_frame(self):
-        """
-        Reset make empty frame
-        :return: list of lines
-        """
-        for L in self.lines:
-            L.set_data([], [])
-        return self.lines
+        self.lines = (
+            self.ad_instant_eigns_line,
+            self.adiabatic_line,
+            self.d_instant_eigns_line,
+            self.diabatic_line
+        )
 
     def __call__(self, frame_num):
         """
@@ -143,8 +132,9 @@ class DynamicVisualized:
 
 fig = plt.gcf()
 visualizer = DynamicVisualized(fig)
-animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
-                          init_func=visualizer.empty_frame, repeat=True, blit=True)
+animation = FuncAnimation(
+    fig, visualizer, frames=np.arange(100), repeat=True, blit=True
+)
 plt.show()
 
 # If you want to make a movie, comment "plt.show()" out and uncomment the lines bellow

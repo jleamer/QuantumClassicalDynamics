@@ -1,128 +1,28 @@
-import numpy as np
-
-# numpy.fft has better implementation of real fourier transform
-# necessary for real split operator propagator
-from numpy import fft
+from split_op_wigner_moyal import SplitOpWignerMoyal, np, ne
 
 
-class SplitOpWignerBloch:
+class SplitOpWignerBloch(SplitOpWignerMoyal):
     """
     The second-order split-operator propagator for
-    finding the Wigner function of the Maxwell-Gibbs canonical state [rho = exp(-H/kT)]
+    finding the Wigner function of the Maxwell-Gibbs canonical state [rho = exp(-beta * H)]
     by split-operator propagation of the Bloch equation in phase space.
+
+    Details about the method can be found at https://arxiv.org/abs/1602.07288
+
     The Hamiltonian should be of the form H = K(p) + V(x).
 
     This implementation follows split_op_wigner_moyal.py
     """
-    def __init__(self, **kwargs):
+    def get_thermal_state(self, beta=None, nsteps=5000):
         """
-        The following parameters must be specified
-            X_gridDIM - the coordinate grid size
-            X_amplitude - maximum value of the coordinates
-            P_gridDIM - the momentum grid size
-            P_amplitude - maximum value of the momentum
-            V(x) - potential energy (as a function)
-            K(p) - momentum dependent part of the hamiltonian (as a function)
-            kT  - the temperature (if kT = 0, then the ground state Wigner function will be obtained.)
-            dbeta - (optional) 1/kT step size
+        Calculate the thermal state via the Bloch propagator
+        :param beta: inverse temperature (default beta = self.beta)
+        :return: self.wignerfunction containing the thermal state
         """
 
-        # save all attributes
-        for name, value in kwargs.items():
-            setattr(self, name, value)
-
-        # Check that all attributes were specified
-        try:
-            self.X_gridDIM
-        except AttributeError:
-            raise AttributeError("Coordinate grid size (X_gridDIM) was not specified")
-
-        assert self.X_gridDIM % 2 == 0, "Coordinate grid size (X_gridDIM) must be even"
-
-        try:
-            self.P_gridDIM
-        except AttributeError:
-            raise AttributeError("Momentum grid size (P_gridDIM) was not specified")
-
-        assert self.P_gridDIM % 2 == 0, "Momentum grid size (P_gridDIM) must be even"
-
-        try:
-            self.X_amplitude
-        except AttributeError:
-            raise AttributeError("Coordinate grid range (X_amplitude) was not specified")
-
-        try:
-            self.P_amplitude
-        except AttributeError:
-            raise AttributeError("Momentum grid range (P_amplitude) was not specified")
-
-        try:
-            self.V
-        except AttributeError:
-            raise AttributeError("Potential energy (V) was not specified")
-
-        try:
-            self.K
-        except AttributeError:
-            raise AttributeError("Momentum dependence (K) was not specified")
-
-        try:
-            self.kT
-        except AttributeError:
-            raise AttributeError("Temperature (kT) was not specified")
-
-        if self.kT > 0:
-            try:
-                self.dbeta
-            except AttributeError:
-                # if dbeta is not defined, just choose some value
-                self.dbeta = 0.01
-
-            # get number of dbeta steps to reach the desired Gibbs state
-            self.num_beta_steps = 1. / (self.kT*self.dbeta)
-
-            if round(self.num_beta_steps) != self.num_beta_steps:
-                # Changing self.dbeta so that num_beta_steps is an exact integer
-                self.num_beta_steps = round(self.num_beta_steps)
-                self.dbeta = 1. / (self.kT*self.num_beta_steps)
-
-            self.num_beta_steps = int(self.num_beta_steps)
-        else:
-            raise NotImplemented("The calculation of the ground state Wigner function has not been implemnted")
-
-        ###################################################################################
-        #
-        #   Generate grids
-        #
-        ###################################################################################
-
-        # get coordinate and momentum step sizes
-        self.dX = 2.*self.X_amplitude / self.X_gridDIM
-        self.dP = 2.*self.P_amplitude / self.P_gridDIM
-
-        # coordinate grid
-        self.X = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
-        self.X = self.X[np.newaxis, :]
-
-        # Lambda grid (variable conjugate to the coordinate)
-        self.Lambda = fft.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
-
-        # take only first half, as required by the real fft
-        self.Lambda = self.Lambda[:(1 + self.X_gridDIM//2)]
-        #
-        self.Lambda = self.Lambda[np.newaxis, :]
-
-        # momentum grid
-        self.P = np.linspace(-self.P_amplitude, self.P_amplitude - self.dP, self.P_gridDIM)
-        self.P = self.P[:, np.newaxis]
-
-        # Theta grid (variable conjugate to the momentum)
-        self.Theta = fft.fftfreq(self.P_gridDIM, self.dP/(2*np.pi))
-
-        # take only first half, as required by the real fft
-        self.Theta = self.Theta[:(1 + self.P_gridDIM//2)]
-        #
-        self.Theta = self.Theta[:, np.newaxis]
+        # get the inverse temperature increment
+        beta = (beta if beta else self.beta)
+        self.dbeta = beta / nsteps
 
         ###################################################################################
         #
@@ -131,68 +31,68 @@ class SplitOpWignerBloch:
         ###################################################################################
 
         # Get the sum of the potential energy contributions
-        self.expV = self.V(self.X - 0.5*self.Theta) + self.V(self.X + 0.5*self.Theta)
-        self.expV *= -0.25*self.dbeta
+        expV = ne.evaluate(
+            "-0.25 * dbeta *( ({V_minus}) + ({V_plus}) )".format(
+                V_minus=self.V.format(X="(X - 0.5 * Theta)"),
+                V_plus=self.V.format(X="(X + 0.5 * Theta)"),
+            ),
+            local_dict=vars(self)
+        )
 
         # Make sure that the largest value is zero
-        self.expV -= self.expV.max()
+        expV -= expV.max()
+
         # such that the following exponent is never larger then one
-        np.exp(self.expV, out=self.expV)
+        np.exp(expV, out=expV)
 
         # Get the sum of the kinetic energy contributions
-        self.expK = self.K(self.P + 0.5*self.Lambda) + self.K(self.P - 0.5*self.Lambda)
-        self.expK *= -0.5*self.dbeta
+        expK = ne.evaluate(
+            "-0.5 * dbeta *( ({K_plus}) + ({K_minus}) )".format(
+                K_plus=self.K.format(P="(P + 0.5 * Lambda)"),
+                K_minus=self.K.format(P="(P - 0.5 * Lambda)")
+            ),
+            local_dict=vars(self)
+        )
 
         # Make sure that the largest value is zero
-        self.expK -= self.expK.max()
+        expK -= expK.max()
+
         # such that the following exponent is never larger then one
-        np.exp(self.expK, out=self.expK)
-
-    def single_step_propagation(self):
-        """
-        Perform single step propagation. The final Wigner function is not normalized.
-        :return: self.wignerfunction
-        """
-        # p x -> theta x
-        self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
-        self.wignerfunction *= self.expV
-
-        # theta x  ->  p x
-        self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
-
-        # p x  ->  p lambda
-        self.wignerfunction = fft.rfft(self.wignerfunction, axis=1)
-        self.wignerfunction *= self.expK
-
-        # p lambda  ->  p x
-        self.wignerfunction = fft.irfft(self.wignerfunction, axis=1)
-
-        # p x -> theta x
-        self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
-        self.wignerfunction *= self.expV
-
-        # theta x  ->  p x
-        self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
-
-        return self.wignerfunction
-
-    def get_gibbs_state(self):
-        """
-        Calculate the Boltzmann-Gibbs state and save it in self.gibbs_state
-        :return:
-        """
-        # pre-compute the volume element in phase space
-        dXdP = self.dX * self.dP
+        np.exp(expK, out=expK)
 
         # Initialize the Wigner function as the infinite temperature Gibbs state
-        self.wignerfunction = 0.*self.X + 0.*self.P + 1.
+        self.set_wignerfunction("1. + 0. * X + 0. * P")
 
-        for _ in xrange(self.num_beta_steps):
-            # propagate by dbeta
-            self.single_step_propagation()
+        ###################################################################################
+        #
+        # Run second order Bloch propagator
+        #
+        ###################################################################################
+
+        for _ in range(nsteps):
+            # p x -> theta x
+            self.wignerfunction = self.transform_p2theta(self.wignerfunction)
+            self.wignerfunction *= expV
+
+            # theta x  ->  p x
+            self.wignerfunction = self.transform_theta2p(self.wignerfunction)
+
+            # p x  ->  p lambda
+            self.wignerfunction = self.transform_x2lambda(self.wignerfunction)
+            self.wignerfunction *= expK
+
+            # p lambda  ->  p x
+            self.wignerfunction = self.transform_lambda2x(self.wignerfunction)
+
+            # p x -> theta x
+            self.wignerfunction = self.transform_p2theta(self.wignerfunction)
+            self.wignerfunction *= expV
+
+            # theta x  ->  p x
+            self.wignerfunction = self.transform_theta2p(self.wignerfunction)
 
             # normalization
-            self.wignerfunction /= self.wignerfunction.sum() * dXdP
+            self.wignerfunction /= self.wignerfunction.sum() * self.dXdP
 
         return self.wignerfunction
 
@@ -210,7 +110,7 @@ if __name__ == '__main__':
 
     qsys_params = dict(
         t=0.,
-        dt=0.005,
+        dt=0.05,
 
         X_gridDIM=256,
         X_amplitude=10.,
@@ -218,20 +118,19 @@ if __name__ == '__main__':
         P_gridDIM=256,
         P_amplitude=10.,
 
-        kT=0.7,
+        beta=1. / 0.7,
 
         # kinetic energy part of the hamiltonian
-        K=lambda p: 0.5*p**2,
+        K="0.5 * {P} ** 2",
 
         # potential energy part of the hamiltonian
-        V=lambda x: 0.5*x**4,
+        V="0.5 * {X} ** 4",
     )
 
     print("Calculating the Gibbs state...")
-    gibbs_state = SplitOpWignerBloch(**qsys_params).get_gibbs_state()
+    gibbs_state = SplitOpWignerBloch(**qsys_params).get_thermal_state()
 
     # Propagate this state via the Wigner-Moyal equation
-    from split_op_wigner_moyal import SplitOpWignerMoyal
 
     print("Check that the obtained Gibbs state is stationary under the Wigner-Moyal propagation...")
     propagator = SplitOpWignerMoyal(**qsys_params)

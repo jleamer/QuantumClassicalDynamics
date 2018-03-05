@@ -12,7 +12,9 @@ class SplitOpWignerMoyal(object):
     with the time-dependent Hamiltonian H = K(p, t) + V(x, t).
     (K and V may not depend on time.)
 
-    This implementation using PyFFTW
+    This implementation using PyFFTW.
+
+    Details about the method can be found at https://arxiv.org/abs/1212.3406
 
     This implementation stores the Wigner function as a 2D real array.
     """

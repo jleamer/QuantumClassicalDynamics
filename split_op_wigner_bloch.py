@@ -13,25 +13,12 @@ class SplitOpWignerBloch(SplitOpWignerMoyal):
 
     This implementation follows split_op_wigner_moyal.py
     """
-    def get_thermal_state(self, beta=None, nsteps=5000):
+    def setup_bloch_propagator(self):
         """
-        Calculate the thermal state via the Bloch propagator
-        :param beta: inverse temperature (default beta = self.beta)
-        :return: self.wignerfunction containing the thermal state
+        Pre-calculate exponents used for the split operator propagation
         """
-
-        # get the inverse temperature increment
-        beta = (beta if beta else self.beta)
-        self.dbeta = beta / nsteps
-
-        ###################################################################################
-        #
-        # Pre-calculate exponents used for the split operator propagation
-        #
-        ###################################################################################
-
         # Get the sum of the potential energy contributions
-        expV = ne.evaluate(
+        self.bloch_expV = ne.evaluate(
             "-0.25 * dbeta *( ({V_minus}) + ({V_plus}) )".format(
                 V_minus=self.V.format(X="(X - 0.5 * Theta)"),
                 V_plus=self.V.format(X="(X + 0.5 * Theta)"),
@@ -40,13 +27,13 @@ class SplitOpWignerBloch(SplitOpWignerMoyal):
         )
 
         # Make sure that the largest value is zero
-        expV -= expV.max()
+        self.bloch_expV -= self.bloch_expV.max()
 
         # such that the following exponent is never larger then one
-        np.exp(expV, out=expV)
+        np.exp(self.bloch_expV, out=self.bloch_expV)
 
         # Get the sum of the kinetic energy contributions
-        expK = ne.evaluate(
+        self.bloch_expK = ne.evaluate(
             "-0.5 * dbeta *( ({K_plus}) + ({K_minus}) )".format(
                 K_plus=self.K.format(P="(P + 0.5 * Lambda)"),
                 K_minus=self.K.format(P="(P - 0.5 * Lambda)")
@@ -55,44 +42,76 @@ class SplitOpWignerBloch(SplitOpWignerMoyal):
         )
 
         # Make sure that the largest value is zero
-        expK -= expK.max()
+        self.bloch_expK -= self.bloch_expK.max()
 
         # such that the following exponent is never larger then one
-        np.exp(expK, out=expK)
+        np.exp(self.bloch_expK, out=self.bloch_expK)
 
         # Initialize the Wigner function as the infinite temperature Gibbs state
         self.set_wignerfunction("1. + 0. * X + 0. * P")
 
-        ###################################################################################
-        #
-        # Run second order Bloch propagator
-        #
-        ###################################################################################
+    def single_step_bloch_propagation(self):
+        """
+        Advance thermal state calculation by self.dbeta using the second order Bloch propagator
+        :return:
+        """
+        # p x -> theta x
+        self.wignerfunction = self.transform_p2theta(self.wignerfunction)
+        self.wignerfunction *= self.bloch_expV
+
+        # theta x  ->  p x
+        self.wignerfunction = self.transform_theta2p(self.wignerfunction)
+
+        # p x  ->  p lambda
+        self.wignerfunction = self.transform_x2lambda(self.wignerfunction)
+        self.wignerfunction *= self.bloch_expK
+
+        # p lambda  ->  p x
+        self.wignerfunction = self.transform_lambda2x(self.wignerfunction)
+
+        # p x -> theta x
+        self.wignerfunction = self.transform_p2theta(self.wignerfunction)
+        self.wignerfunction *= self.bloch_expV
+
+        # theta x  ->  p x
+        self.wignerfunction = self.transform_theta2p(self.wignerfunction)
+
+        # normalization
+        self.wignerfunction /= self.wignerfunction.sum() * self.dXdP
+
+    def get_thermal_state(self, beta=None, nsteps=5000):
+        """
+        Calculate the thermal state via the Bloch propagator
+        :param beta: inverse temperature (default beta = self.beta)
+        :return: self.wignerfunction containing the thermal state
+        """
+        # get the inverse temperature increment
+        beta = (beta if beta else self.beta)
+        self.dbeta = beta / nsteps
+
+        self.setup_bloch_propagator()
 
         for _ in range(nsteps):
-            # p x -> theta x
-            self.wignerfunction = self.transform_p2theta(self.wignerfunction)
-            self.wignerfunction *= expV
+            self.single_step_bloch_propagation()
 
-            # theta x  ->  p x
-            self.wignerfunction = self.transform_theta2p(self.wignerfunction)
+            # check that the purity of the state does not exceed one
+            if self.get_purity() > 1.:
+                print("Warning: Purity reached an identity")
+                break
 
-            # p x  ->  p lambda
-            self.wignerfunction = self.transform_x2lambda(self.wignerfunction)
-            self.wignerfunction *= expK
+        return self.wignerfunction
 
-            # p lambda  ->  p x
-            self.wignerfunction = self.transform_lambda2x(self.wignerfunction)
+    def get_ground_state(self, dbeta=None):
+        """
+        Calculate the Wigner function of the ground state as a zero temperature Gibbs state
+        :return: self.wignerfunction
+        """
+        self.dbeta = (dbeta if dbeta else 2. * self.dt)
 
-            # p x -> theta x
-            self.wignerfunction = self.transform_p2theta(self.wignerfunction)
-            self.wignerfunction *= expV
+        self.setup_bloch_propagator()
 
-            # theta x  ->  p x
-            self.wignerfunction = self.transform_theta2p(self.wignerfunction)
-
-            # normalization
-            self.wignerfunction /= self.wignerfunction.sum() * self.dXdP
+        while self.get_purity() < 1:
+            self.single_step_bloch_propagation()
 
         return self.wignerfunction
 

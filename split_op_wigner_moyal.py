@@ -1,15 +1,18 @@
 import numpy as np
+import numexpr as ne
+from types import MethodType, FunctionType
+# in other codes, we have used scipy.fftpack to perform Fourier Transforms.
+# In this code, we will use pyfftw, which is more suited for efficient large data
+import pyfftw
 
-# numpy.fft has better implementation of real fourier transform
-# necessary for real split operator propagator
-from numpy import fft
 
-
-class SplitOpWignerMoyal:
+class SplitOpWignerMoyal(object):
     """
     The second-order split-operator propagator for the Moyal equation for the Wigner function W(x, p, t)
     with the time-dependent Hamiltonian H = K(p, t) + V(x, t).
     (K and V may not depend on time.)
+
+    This implementation using PyFFTW
 
     This implementation stores the Wigner function as a 2D real array.
     """
@@ -18,34 +21,37 @@ class SplitOpWignerMoyal:
         The following parameters must be specified
             X_gridDIM - the coordinate grid size
             X_amplitude - maximum value of the coordinates
+
             P_gridDIM - the momentum grid size
             P_amplitude - maximum value of the momentum
-            V(x) - potential energy (as a function) may depend on time
+
+            V(x) - potential energy (as a string to be evaluated by numexpr) may depend on time
             diff_V(x) (optional) -- the derivative of the potential energy for the Ehrenfest theorem calculations
-            K(p) - momentum dependent part of the hamiltonian (as a function) may depend on time
+
+            K(p) - the kinetic energy (as a string to be evaluated by numexpr) may depend on time
             diff_K(p) (optional) -- the derivative of the kinetic energy for the Ehrenfest theorem calculations
+
             dt - time step
             t (optional) - initial value of time
         """
-
         # save all attributes
         for name, value in kwargs.items():
-            setattr(self, name, value)
+            # if the value supplied is a function, then dynamically assign it as a method;
+            # otherwise bind it as a property
+            if isinstance(value, FunctionType):
+                setattr(self, name, MethodType(value, self, self.__class__))
+            else:
+                setattr(self, name, value)
 
-        # Check that all attributes were specified
+        # Check that all the necessary attributes were specified
         try:
-            self.X_gridDIM
+            # make sure self.X_gridDIM and self.P_gridDIM has a value of power of 2
+            assert 2 ** int(np.log2(self.X_gridDIM)) == self.X_gridDIM and \
+                2 ** int(np.log2(self.P_gridDIM)) == self.P_gridDIM, \
+                "A value of the grid sizes (X_gridDIM and P_gridDIM) must be a power of 2"
+
         except AttributeError:
-            raise AttributeError("Coordinate grid size (X_gridDIM) was not specified")
-
-        assert self.X_gridDIM % 2 == 0, "Coordinate grid size (X_gridDIM) must be even"
-
-        try:
-            self.P_gridDIM
-        except AttributeError:
-            raise AttributeError("Momentum grid size (P_gridDIM) was not specified")
-
-        assert self.P_gridDIM % 2 == 0, "Momentum grid size (P_gridDIM) must be even"
+            raise AttributeError("Grid sizes (X_gridDIM and/or P_gridDIM) was not specified")
 
         try:
             self.X_amplitude
@@ -78,129 +84,121 @@ class SplitOpWignerMoyal:
             print("Warning: Initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
+        ########################################################################################
+        #
+        #   Initialize Fourier transform for efficient calculations
+        #
+        ########################################################################################
+
+        # Turn on the cache for optimum performance
+        pyfftw.interfaces.cache.enable()
+
+        # allocate the array for Wigner function
+        self.wignerfunction = pyfftw.empty_aligned((self.P_gridDIM, self.X_gridDIM), dtype=np.float)
+
+        # p x -> theta x
+        self.transform_p2theta = pyfftw.builders.rfft(
+            self.wignerfunction, axis=0,
+            overwrite_input=True,  avoid_copy=True, threads=ne.nthreads,
+        )
+
+        # theta x  ->  p x
+        self.transform_theta2p = pyfftw.builders.irfft(
+            self.transform_p2theta(), axis=0,
+            overwrite_input=True, avoid_copy=True, threads=ne.nthreads,
+        )
+
+        # p x  ->  p lambda
+        self.transform_x2lambda = pyfftw.builders.rfft(
+            self.wignerfunction, axis=1,
+            overwrite_input=True, avoid_copy=True, threads=ne.nthreads,
+        )
+
+        # p lambda  ->  p x
+        self.transform_lambda2x = pyfftw.builders.irfft(
+            self.transform_x2lambda(), axis=1,
+            overwrite_input=True, avoid_copy=True, threads=ne.nthreads,
+        )
+
+        ########################################################################################
+        #
+        #   Initialize grids
+        #
+        ########################################################################################
+
         # get coordinate and momentum step sizes
         self.dX = 2.*self.X_amplitude / self.X_gridDIM
         self.dP = 2.*self.P_amplitude / self.P_gridDIM
 
-        # coordinate grid
-        self.X = np.linspace(-self.X_amplitude, self.X_amplitude - self.dX , self.X_gridDIM)
-        self.X = self.X[np.newaxis, :]
+        # pre-compute the volume element in phase space
+        self.dXdP = self.dX * self.dP
+
+        # generate coordinate and momentum ranges
+        # see http://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
+        # for explanation of np.newaxis and other array indexing operations
+        # also https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+        # for understanding the broadcasting in array operations
+
+        self.X = (np.arange(self.X_gridDIM)[np.newaxis, :] - self.X_gridDIM / 2) * self.dX
+        self.P = (np.arange(self.P_gridDIM)[:, np.newaxis] - self.P_gridDIM / 2) * self.dP
+
+        #self.kX = np.arange(1 + self.X_gridDIM // 2)[np.newaxis, :]
+        #self.kP = np.arange(1 + self.P_gridDIM // 2)[:, np.newaxis]
 
         # Lambda grid (variable conjugate to the coordinate)
-        self.Lambda = fft.fftfreq(self.X_gridDIM, self.dX/(2*np.pi))
-
-        # take only first half, as required by the real fft
-        self.Lambda = self.Lambda[:(1 + self.X_gridDIM//2)]
-        #
-        self.Lambda = self.Lambda[np.newaxis, :]
-
-        # momentum grid
-        self.P = np.linspace(-self.P_amplitude, self.P_amplitude - self.dP, self.P_gridDIM)
-        self.P = self.P[:, np.newaxis]
+        # (take only first half, as required by the real fft)
+        self.Lambda = np.arange(1 + self.X_gridDIM // 2)[np.newaxis, :] * (np.pi / self.X_amplitude)
 
         # Theta grid (variable conjugate to the momentum)
-        self.Theta = fft.fftfreq(self.P_gridDIM, self.dP/(2*np.pi))
+        # (take only first half, as required by the real fft)
+        self.Theta = np.arange(1 + self.P_gridDIM // 2)[:, np.newaxis] * (np.pi / self.P_amplitude)
 
-        # take only first half, as required by the real fft
-        self.Theta = self.Theta[:(1 + self.P_gridDIM//2)]
-        #
-        self.Theta = self.Theta[:, np.newaxis]
+        # numexpr code to calculate (-)**kP * np.exp(
+        #        -self.dt*0.5j*(self.V(self.X - 0.5*self.Theta) - self.V(self.X + 0.5*self.Theta))
+        # )
+        self.code_expV = "exp(-0.5j * dt * (({V_minus}) - ({V_plus})))".format(
+            V_minus=self.V.format(X="(X - 0.5 * Theta)"),
+            V_plus=self.V.format(X="(X + 0.5 * Theta)"),
+        )
 
-        try:
-            # Pre-calculate the exponent, if the potential is time independent
-            self._expV = np.exp(
-                -self.dt*0.5j*(self.V(self.X - 0.5*self.Theta) - self.V(self.X + 0.5*self.Theta))
-            )
-        except TypeError:
-            # If exception is generated, then the potential is time-dependent
-            # and caching is not possible
-            pass
+        # allocate the memory for expV
+        self.expV = ne.evaluate(self.code_expV, local_dict=vars(self))
 
-        try:
-            # Pre-calculate the exponent, if the kinetic energy is time independent
-            self._expK = np.exp(
-                -self.dt*1j*(self.K(self.P + 0.5*self.Lambda) - self.K(self.P - 0.5*self.Lambda))
-            )
-        except TypeError:
-            # If exception is generated, then the kinetic energy is time-dependent
-            # and caching is not possible
-            pass
+        # numexpr code to calculate self.wignerfunction * np.exp(
+        #    -self.dt * 1j * (self.K(self.P + 0.5 * self.Lambda) - self.K(self.P - 0.5 * self.Lambda))
+        #)
+        self.code_expK = "wignerfunction * exp(-dt * 1j *(({K_plus}) - ({K_minus})))".format(
+            K_plus=self.K.format(P="(P + 0.5 * Lambda)"),
+            K_minus=self.K.format(P="(P - 0.5 * Lambda)")
+        )
 
         # Check whether the necessary terms are specified to calculate the Ehrenfest theorems
         try:
-            # Pre-calculate RHS if time independent
-            try:
-                self._diff_V = self.diff_V(self.X)
-            except TypeError:
-                pass
-
-            # Pre-calculate RHS if time independent
-            try:
-                self._diff_K = self.diff_K(self.P)
-            except TypeError:
-                pass
-
-            # Pre-calculate the potential and kinetic energies for
-            # calculating the expectation value of Hamiltonian
-            try:
-                self._V = self.V(self.X)
-            except TypeError:
-                pass
-            try:
-                self._K = self.K(self.P)
-            except TypeError:
-                pass
-
-            # Lists where the expectation values of X and P
-            self.X_average = []
-            self.P_average = []
+            # numexpr codes to calculate the first-order Ehrenfest theorems
+            self.code_P_average_RHS = "sum(({}) * wignerfunction)".format(self.diff_V.format(X="X"))
+            self.code_X_average_RHS = "sum(({}) * wignerfunction)".format(self.diff_K.format(P="P"))
 
             # Lists where the right hand sides of the Ehrenfest theorems for X and P
             self.X_average_RHS = []
             self.P_average_RHS = []
 
+            # Lists where the expectation values of X and P
+            self.X_average = []
+            self.P_average = []
+
             # List where the expectation value of the Hamiltonian will be calculated
             self.hamiltonian_average = []
 
+            self.code_V_average = "sum(({}) * wignerfunction)".format(self.V.format(X="X"))
+            self.code_K_average = "sum(({}) * wignerfunction)".format(self.K.format(P="P"))
+
             # Flag requesting tha the Ehrenfest theorem calculations
             self.isEhrenfest = True
+
         except AttributeError:
             # Since self.diff_V and self.diff_K are not specified,
             # the Ehrenfest theorem will not be calculated
             self.isEhrenfest = False
-
-    def single_step_propagation(self):
-        """
-        Perform single step propagation. The final Wigner function is not normalized.
-        :return: self.wignerfunction
-        """
-        expV = self.get_expV(self.t)
-
-        # p x -> theta x
-        self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
-        self.wignerfunction *= expV
-
-        # theta x  ->  p x
-        self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
-
-        # p x  ->  p lambda
-        self.wignerfunction = fft.rfft(self.wignerfunction, axis=1)
-        self.wignerfunction *= self.get_expK(self.t)
-
-        # p lambda  ->  p x
-        self.wignerfunction = fft.irfft(self.wignerfunction, axis=1)
-
-        # p x -> theta x
-        self.wignerfunction = fft.rfft(self.wignerfunction, axis=0)
-        self.wignerfunction *= expV
-
-        # theta x  ->  p x
-        self.wignerfunction = fft.irfft(self.wignerfunction, axis=0)
-
-        # increment current time
-        self.t += self.dt
-
-        return self.wignerfunction
 
     def propagate(self, time_steps=1):
         """
@@ -208,145 +206,116 @@ class SplitOpWignerMoyal:
         :param time_steps: number of self.dt time increments to make
         :return: self.wignerfunction
         """
-        # pre-compute the volume element in phase space
-        dXdP = self.dX * self.dP
-
-        for _ in xrange(time_steps):
-
+        for _ in range(time_steps):
             # advance by one time step
             self.single_step_propagation()
 
             # normalization
-            self.wignerfunction /= self.wignerfunction.sum() * dXdP
+            self.wignerfunction /= self.wignerfunction.sum() * self.dXdP
 
             # calculate the Ehrenfest theorems
-            self.get_Ehrenfest(self.t)
+            self.get_Ehrenfest()
 
         return self.wignerfunction
 
-    def get_Ehrenfest(self, t):
+    def get_purity(self):
+        """
+        Purity of the current wigner function
+        :return:
+        """
+        return 2. * np.pi * ne.evaluate("sum(wignerfunction ** 2)", local_dict=vars(self)) * self.dXdP
+
+    def single_step_propagation(self):
+        """
+        Perform single step propagation. The final Wigner function is not normalized.
+        :return: self.wignerfunction
+        """
+        # make a half step in time
+        self.t += 0.5 * self.dt
+
+        # efficiently calculate expV
+        ne.evaluate(self.code_expV, local_dict=vars(self), out=self.expV)
+
+        # p x -> theta x
+        self.wignerfunction = self.transform_p2theta(self.wignerfunction)
+
+        self.wignerfunction *= self.expV
+
+        # theta x  ->  p x
+        self.wignerfunction = self.transform_theta2p(self.wignerfunction)
+
+        # p x  ->  p lambda
+        self.wignerfunction = self.transform_x2lambda(self.wignerfunction)
+        ne.evaluate(self.code_expK, local_dict=vars(self), out=self.wignerfunction)
+
+        # p lambda  ->  p x
+        self.wignerfunction = self.transform_lambda2x(self.wignerfunction)
+
+        # p x -> theta x
+        self.wignerfunction = self.transform_p2theta(self.wignerfunction)
+        self.wignerfunction *= self.expV
+
+        # theta x  ->  p x
+        self.wignerfunction = self.transform_theta2p(self.wignerfunction)
+
+        # make a half step in time
+        self.t += 0.5 * self.dt
+
+        return self.wignerfunction
+
+    def get_Ehrenfest(self):
         """
         Calculate observables entering the Ehrenfest theorems at time (t)
-        :param t: time
-        :return: coordinate and momentum marginals of the Wigner function
         """
         if self.isEhrenfest:
-            # calculate the coordinate density
-            density_coord = self.wignerfunction.sum(axis=0)
-            # normalize
-            density_coord /= density_coord.sum()
 
-            # save the current value of <X>
             self.X_average.append(
-                np.dot(density_coord, self.X.reshape(-1))
-            )
-            self.P_average_RHS.append(
-                -np.dot(density_coord, self.get_diff_V(t).reshape(-1))
-            )
+                ne.evaluate("sum(X * wignerfunction)", local_dict=vars(self)) * self.dXdP
 
-            # calculate density in the momentum representation
-            density_momentum = self.wignerfunction.sum(axis=1)
-            # normalize
-            density_momentum /= density_momentum.sum()
-
-            # save the current value of <P>
+            )
             self.P_average.append(
-                np.dot(density_momentum, self.P.reshape(-1))
+                ne.evaluate("sum(P * wignerfunction)", local_dict=vars(self)) * self.dXdP
+            )
+
+            self.P_average_RHS.append(
+                -ne.evaluate(self.code_P_average_RHS, local_dict=vars(self)) * self.dXdP
             )
             self.X_average_RHS.append(
-                np.dot(density_momentum, self.get_diff_K(t).reshape(-1))
+                ne.evaluate(self.code_X_average_RHS, local_dict=vars(self)) * self.dXdP
             )
 
-            # save the current expectation value of energy
             self.hamiltonian_average.append(
-                np.dot(density_momentum, self.get_K(t).reshape(-1))
+                ne.evaluate(self.code_K_average, local_dict=vars(self)) * self.dXdP
                 +
-                np.dot(density_coord, self.get_V(t).reshape(-1))
+                ne.evaluate(self.code_V_average, local_dict=vars(self)) * self.dXdP
             )
 
-            return density_coord, density_momentum
-
-    def get_expV(self, t):
-        """
-        Return the exponent of the potential energy difference at time (t)
-        """
-        try:
-            # aces the pre-calculated value
-            return self._expV
-        except AttributeError:
-            # Calculate in efficient way
-            result = -self.dt*0.5j*(self.V(self.X - 0.5*self.Theta, t) - self.V(self.X + 0.5*self.Theta, t))
-            return np.exp(result, out=result)
-
-    def get_expK(self, t):
-        """
-        Return the exponent of the kinetic energy difference at time  (t)
-        """
-        try:
-            # aces the pre-calculated value
-            return self._expK
-        except AttributeError:
-            # Calculate result = np.exp(*self.K(self.P1, self.P2, t))
-            result = -self.dt*1j*(self.K(self.P + 0.5*self.Lambda, t) - self.K(self.P - 0.5*self.Lambda, t))
-            return np.exp(result, out=result)
-
-    def get_diff_V(self, t):
-        """
-        Return the RHS for the Ehrenfest theorem at time (t)
-        """
-        try:
-            # access the pre-calculated value
-            return self._diff_V
-        except AttributeError:
-            return self.diff_V(self.X, t)
-
-    def get_diff_K(self, t):
-        """
-        Return the RHS for the Ehrenfest theorem at time (t)
-        """
-        try:
-            # access the pre-calculated value
-            return self._diff_K
-        except AttributeError:
-            return self.diff_K(self.P, t)
-
-    def get_K(self, t):
-        """
-        Return the kinetic energy at time (t)
-        """
-        try:
-            return self._K
-        except AttributeError:
-            return self.K(self.P, t)
-
-    def get_V(self, t):
-        """
-        Return the potential energy at time (t)
-        """
-        try:
-            return self._V
-        except AttributeError:
-            return self.V(self.X, t)
-
-    def set_wignerfunction(self, new_wigner_func):
+    def set_wignerfunction(self, new_wignerfunction):
         """
         Set the initial Wigner function
-        :param new_wigner_func: 2D numoy array contaning the wigner function
+        :param new_wignerfunction: a 2D numpy array or sting containing the wigner function
         :return: self
         """
-        # perform the consistency checks
-        assert new_wigner_func.shape == (self.P.size, self.X.size), \
-            "The grid sizes does not match with the Wigner function"
+        if isinstance(new_wignerfunction, str):
+            # Wigner function is supplied as a string
+            ne.evaluate(new_wignerfunction, local_dict=vars(self), out=self.wignerfunction)
 
-        assert new_wigner_func.dtype == np.float, "Supplied Wigner function must be real"
+        elif isinstance(new_wignerfunction, np.ndarray):
 
-        # make sure the Wigner function is stored as a complex array
-        self.wignerfunction = new_wigner_func.copy()
+            assert new_wignerfunction.shape == self.wignerfunction.shape, \
+                "The grid sizes does not match with the Wigner function"
+
+            # save only real part
+            np.copyto(self.wignerfunction, new_wignerfunction.real)
+
+        else:
+            raise ValueError("Wigner function must be either string or numpy.array")
 
         # normalize
-        self.wignerfunction /= self.wignerfunction.sum() * self.dX*self.dP
+        self.wignerfunction /= self.wignerfunction.sum() * self.dXdP
 
         return self
+
 
 ##############################################################################
 #
@@ -355,14 +324,6 @@ class SplitOpWignerMoyal:
 ##############################################################################
 
 if __name__ == '__main__':
-
-    # load tools for creating animation
-    import sys
-
-    if sys.platform == 'darwin':
-        # only for MacOS
-        import matplotlib
-        matplotlib.use('TKAgg')
 
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
@@ -401,12 +362,13 @@ if __name__ == '__main__':
             from wigner_normalize import WignerNormalize
 
             # generate empty plot
-            self.img = ax.imshow([[]],
-                                 extent=extent,
-                                 origin='lower',
-                                 cmap='seismic',
-                                 norm=WignerNormalize(vmin=-0.01, vmax=0.1)
-                                 )
+            self.img = ax.imshow(
+                [[]],
+                extent=extent,
+                origin='lower',
+                cmap='seismic',
+                norm=WignerNormalize(vmin=-0.01, vmax=0.1)
+            )
 
             self.fig.colorbar(self.img)
 
@@ -419,49 +381,39 @@ if __name__ == '__main__':
             :param self:
             :return:
             """
-            omega_square = np.random.uniform(1, 3)
-
             self.quant_sys = SplitOpWignerMoyal(
                 t=0,
-                dt=0.005,
+
+                dt=0.05,
+
                 X_gridDIM=256,
-                X_amplitude=8.,
+                X_amplitude=10.,
+
                 P_gridDIM=256,
-                P_amplitude=7.,
+                P_amplitude=10.,
 
                 # kinetic energy part of the hamiltonian
-                K=lambda p: 0.5 * p ** 2,
+                K="0.5 * {P} ** 2",
+
+                #omega=np.random.uniform(1, 3),
+                omega=1.,
 
                 # potential energy part of the hamiltonian
-                V=lambda x: 0.5 * omega_square * x ** 2,
+                V="0.5 * (omega * {X}) ** 2",
 
                 # these functions are used for evaluating the Ehrenfest theorems
-                diff_K=lambda p: p,
-                diff_V=lambda x: omega_square * x,
+                diff_K="{P}",
+                diff_V="omega ** 2 * {X}",
             )
-
-            # parameter controling the width of the wigner function
-            sigma = np.random.uniform(0.5, 3.)
 
             # set randomised initial condition
             self.quant_sys.set_wignerfunction(
-                np.exp(
-                    # randomized position
-                    -sigma * (self.quant_sys.X + np.random.uniform(-1., 1.)) ** 2
-                    # randomized initial velocity
-                    - (1. / sigma) * (self.quant_sys.P + np.random.uniform(-1., 1.)) ** 2
+                "exp( -{sigma} * (X - {X0}) ** 2 - (1. / {sigma}) * (P - {P0}) ** 2 )".format(
+                    sigma=np.random.uniform(1., 3.),
+                    P0=np.random.uniform(-3., 3.),
+                    X0=np.random.uniform(-3., 3.),
                 )
             )
-
-        def empty_frame(self):
-            """
-            Make empty frame and reinitialize quantum system
-            :param self:
-            :return: image object
-            """
-            self.set_quantum_sys()
-            self.img.set_array([[]])
-            return self.img,
 
         def __call__(self, frame_num):
             """
@@ -470,14 +422,15 @@ if __name__ == '__main__':
             :return: image objects
             """
             # propagate the wigner function
-            self.img.set_array(self.quant_sys.propagate(20).real)
+            self.img.set_array(self.quant_sys.propagate(20))
             return self.img,
 
 
     fig = plt.gcf()
     visualizer = VisualizeDynamicsPhaseSpace(fig)
-    animation = FuncAnimation(fig, visualizer, frames=np.arange(100),
-                              init_func=visualizer.empty_frame, repeat=True, blit=True)
+    animation = FuncAnimation(
+        fig, visualizer, frames=np.arange(100), repeat=True, blit=True
+    )
     plt.show()
 
     # extract the reference to quantum system
@@ -512,7 +465,7 @@ if __name__ == '__main__':
     plt.title("The second Ehrenfest theorem verification")
 
     plt.plot(times, np.gradient(quant_sys.P_average, dt), 'r-', label='$d\\langle p \\rangle/dt$')
-    plt.plot(times, quant_sys.P_average_RHS, 'b--', label='$\\langle -\\partial \\partial V/\\partial x \\rangle$')
+    plt.plot(times, quant_sys.P_average_RHS, 'b--', label='$\\langle -\\partial V/\\partial x \\rangle$')
 
     plt.legend()
     plt.xlabel('time $t$ (a.u.)')
@@ -523,4 +476,3 @@ if __name__ == '__main__':
     plt.xlabel('time $t$ (a.u.)')
 
     plt.show()
-

@@ -79,10 +79,11 @@ class SplitOpWignerBloch(SplitOpWignerMoyal):
         # normalization
         self.wignerfunction /= self.wignerfunction.sum() * self.dXdP
 
-    def get_thermal_state(self, beta=None, nsteps=5000):
+    def get_thermal_state(self, beta=None, nsteps=5000, max_purity=0.9999):
         """
         Calculate the thermal state via the Bloch propagator
         :param beta: inverse temperature (default beta = self.beta)
+        :param max_purity: maximum value of purity to be allowed
         :return: self.wignerfunction containing the thermal state
         """
         # get the inverse temperature increment
@@ -95,22 +96,23 @@ class SplitOpWignerBloch(SplitOpWignerMoyal):
             self.single_step_bloch_propagation()
 
             # check that the purity of the state does not exceed one
-            if self.get_purity() > 1.:
-                print("Warning: Purity reached an identity")
+            if self.get_purity() > max_purity:
+                print("Warning: Purity reached the maximum")
                 break
 
         return self.wignerfunction
 
-    def get_ground_state(self, dbeta=None):
+    def get_ground_state(self, dbeta=None, max_purity=0.9999):
         """
         Calculate the Wigner function of the ground state as a zero temperature Gibbs state
+        :param max_purity: maximum value of purity to be allowed
         :return: self.wignerfunction
         """
         self.dbeta = (dbeta if dbeta else 2. * self.dt)
 
         self.setup_bloch_propagator()
 
-        while self.get_purity() < 1:
+        while self.get_purity() < max_purity:
             self.single_step_bloch_propagation()
 
         return self.wignerfunction

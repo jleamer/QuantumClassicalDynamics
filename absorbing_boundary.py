@@ -36,10 +36,10 @@ sys_params = dict(
 
     # Define the  potential energy as a sum of the soft core Columb potential
     # and the laser field interaction in the dipole approximation
-    V="-1. / sqrt(X ** 2 + 1.37) + X * (%s)" % E_laser,
+    V="-1. / sqrt(X ** 2 + 1.37) + X * ({})".format(E_laser),
 
     # the derivative of the potential to calculate Ehrenfest
-    diff_V="X * (X ** 2 + 1.37) ** (-1.5) + (%s)" % E_laser,
+    diff_V="X * (X ** 2 + 1.37) ** (-1.5) + ({})".format(E_laser),
 
     # add constant pi
     pi=np.pi,
@@ -67,7 +67,7 @@ def test_propagation(sys):
 
     # display the propagator
     plt.imshow(
-        [np.abs(sys.propagate(steps)) ** 2 for _ in xrange(iterations)],
+        [np.abs(sys.propagate(steps)) ** 2 for _ in range(iterations)],
         origin='lower',
         norm=LogNorm(vmin=1e-12, vmax=0.1),
         aspect=0.4, # image aspect ratio
@@ -86,7 +86,7 @@ def test_Ehrenfest1(sys):
 
     dX_dt = np.gradient(sys.X_average, sys.dt)
 
-    print("%.2e" % np.linalg.norm(dX_dt - sys.X_average_RHS))
+    print("{:.2e}".format(np.linalg.norm(dX_dt - sys.X_average_RHS)))
 
     plt.plot(times, dX_dt, '-r', label='$d\\langle\\hat{x}\\rangle / dt$')
     plt.plot(times, sys.X_average_RHS, '--b', label='$\\langle\\hat{p}\\rangle$')
@@ -103,7 +103,7 @@ def test_Ehrenfest2(sys):
 
     dP_dt = np.gradient(sys.P_average, sys.dt)
 
-    print("%.2e" % np.linalg.norm(dP_dt - sys.P_average_RHS))
+    print("{:.2e}".format(np.linalg.norm(dP_dt - sys.P_average_RHS)))
 
     plt.plot(times, dP_dt, '-r', label='$d\\langle\\hat{p}\\rangle / dt$')
     plt.plot(times, sys.P_average_RHS, '--b', label='$\\langle -U\'(\\hat{x})\\rangle$')
@@ -116,6 +116,7 @@ def test_Ehrenfest2(sys):
 #   Declare the propagators
 #
 #########################################################################
+
 
 sys_no_abs_boundary = ImgTimePropagation(**sys_params)
 sys_with_abs_boundary = ImgTimePropagation(

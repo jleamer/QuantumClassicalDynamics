@@ -22,9 +22,9 @@ class VerletIntegrator:
         # save all attributes
         for name, value in kwargs.items():
             # if the value supplied is a function, then dynamically assign it as a method;
-            # otherwise bind it a property
             if isinstance(value, FunctionType):
-                setattr(self, name, MethodType(value, self, self.__class__))
+                setattr(self, name, MethodType(value, self))
+            # otherwise bind it as a property
             else:
                 setattr(self, name, value)
 
@@ -74,7 +74,6 @@ class VerletIntegrator:
             # the Ehrenfest theorem will not be calculated
             self.isEhrenfest = False
 
-
     def set_ensemble(self, X, P, weights=None):
         """
         Set initial condition for classical ensemble
@@ -112,7 +111,7 @@ class VerletIntegrator:
         :param time_steps: number of self.dt time increments to make
         :return: (self.X, self.P) updated positions and momenta of classical particles
         """
-        for _ in xrange(time_steps):
+        for _ in range(time_steps):
 
             # Perfrom the Verlet propagation
             # Step 1 (update momentum): P1 = P - grad_V(X) * dt/2
@@ -208,16 +207,16 @@ if __name__ == '__main__':
     )
 
     # propagate
-    c = np.arange(sys.X.shape[1])
-    for _ in xrange(2000):
+    c = np.arange(sys.X.shape[1], dtype=np.float).reshape(sys.X.shape)
+    for _ in range(2000):
         X, P = sys.propagate(100)
-        plt.scatter(X, P, s=1, c=c, edgecolors='face')
+        plt.scatter(X, P, c=c, s=1, edgecolors='face')
 
     plt.xlabel('$x$ (a.u.)')
     plt.ylabel('$p$ (a.u.)')
 
     var_hamiltonian = 100. * (max(sys.hamiltonian_average) / min(sys.hamiltonian_average) - 1.)
-    print("\nHamilton variation %.2e percent\n" % var_hamiltonian)
+    print("\nHamilton variation {:.2e} percent\n".format(var_hamiltonian))
 
     plt.show()
 
@@ -296,7 +295,7 @@ if __name__ == '__main__':
 
     # propagate
     c = np.arange(sys.X.shape[1])
-    for _ in xrange(2000):
+    for _ in range(2000):
         X, P = sys.propagate(150)
         plt.scatter(X[0], P[0], s=2, c=c, edgecolors='face')
 
@@ -304,7 +303,7 @@ if __name__ == '__main__':
     plt.ylabel('$p_1$ (a.u.)')
 
     var_hamiltonian = 100. * (max(sys.hamiltonian_average) / min(sys.hamiltonian_average) - 1.)
-    print("\nHamilton variation %.2e percent\n" % var_hamiltonian)
+    print("\nHamilton variation {:.2e} percent\n".format(var_hamiltonian))
 
     plt.show()
 

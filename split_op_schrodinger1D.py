@@ -27,9 +27,9 @@ class SplitOpSchrodinger1D:
         # save all attributes
         for name, value in kwargs.items():
             # if the value supplied is a function, then dynamically assign it as a method;
-            # otherwise bind it a property
             if isinstance(value, FunctionType):
-                setattr(self, name, MethodType(value, self, self.__class__))
+                setattr(self, name, MethodType(value, self))
+            # otherwise bind it as a property
             else:
                 setattr(self, name, value)
 

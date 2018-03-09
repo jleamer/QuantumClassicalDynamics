@@ -3,7 +3,7 @@ Codes for learning how to numerically simulate quantum and classical mechanics
 
 Python 3
 
-Library used
+Libraries used
 * [Matplotlib](https://matplotlib.org/)
 * [SciPy](https://www.scipy.org/)
 * [NumPy](http://www.numpy.org/)

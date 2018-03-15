@@ -1,4 +1,4 @@
-from split_op_wigner_moyal import SplitOpWignerMoyal, np, ne
+from split_op_wigner_moyal import SplitOpWignerMoyal, np, ne, warnings
 
 
 class SplitOpWignerBloch(SplitOpWignerMoyal):
@@ -97,7 +97,7 @@ class SplitOpWignerBloch(SplitOpWignerMoyal):
 
             # check that the purity of the state does not exceed one
             if self.get_purity() > max_purity:
-                print("Warning: Purity reached the maximum")
+                warnings.warn("purity reached the maximum")
                 break
 
         return self.wignerfunction

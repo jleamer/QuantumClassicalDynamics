@@ -1,6 +1,7 @@
 import numpy as np
 import numexpr as ne
 from types import MethodType, FunctionType
+import warnings
 import pickle
 # in other codes, we have used scipy.fftpack to perform Fourier Transforms.
 # In this code, we will use pyfftw, which is more suited for efficient large data
@@ -74,13 +75,13 @@ class DensityMatrix(object):
             self.A
         except AttributeError:
             self.A = self.RHS_P_A = "0."
-            print("Warning: Coordinate dependent Lindblad dissipator (A) was not specified so it is set to zero")
+            warnings.warn("coordinate dependent Lindblad dissipator (A) was not specified so it is set to zero")
 
         try:
             self.B
         except AttributeError:
             self.B = self.RHS_X_B = "0."
-            print("Warning: Momentum dependent Lindblad dissipator (B) was not specified so it is set to zero")
+            warnings.warn("momentum dependent Lindblad dissipator (B) was not specified so it is set to zero")
 
         try:
             self.dt
@@ -90,13 +91,13 @@ class DensityMatrix(object):
         try:
             self.t
         except AttributeError:
-            print("Warning: Initial time (t) was not specified, thus it is set to zero.")
+            warnings.warn("initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
         try:
             self.abs_boundary
         except AttributeError:
-            print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
+            warnings.warn("absorbing boundary (abs_boundary) was not specified, thus it is turned off")
             self.abs_boundary = "1."
 
         ########################################################################################

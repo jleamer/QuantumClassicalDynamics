@@ -4,6 +4,7 @@ from types import MethodType, FunctionType
 # in other codes, we have used scipy.fftpack to perform Fourier Transforms.
 # In this code, we will use pyfftw, which is more suited for efficient large data
 import pyfftw
+import warnings
 
 
 class SplitOpWignerMoyal(object):
@@ -84,7 +85,7 @@ class SplitOpWignerMoyal(object):
         try:
             self.t
         except AttributeError:
-            print("Warning: Initial time (t) was not specified, thus it is set to zero.")
+            warnings.warn("initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
         ########################################################################################

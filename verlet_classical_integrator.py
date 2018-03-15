@@ -1,5 +1,6 @@
 import numpy as np
 from types import MethodType, FunctionType
+import warnings
 
 
 class VerletIntegrator:
@@ -47,7 +48,7 @@ class VerletIntegrator:
         try:
             self.t
         except AttributeError:
-            print("Warning: Initial time (t) was not specified, thus it is set to zero.")
+            warnings.warn("initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
         try:

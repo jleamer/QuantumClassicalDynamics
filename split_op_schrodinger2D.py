@@ -3,6 +3,7 @@ import numexpr as ne
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
 from types import MethodType, FunctionType
+import warnings
 
 
 class SplitOpSchrodinger2D:
@@ -76,13 +77,13 @@ class SplitOpSchrodinger2D:
         try:
             self.t
         except AttributeError:
-            print("Warning: Initial time (t) was not specified, thus it is set to zero.")
+            warnings.warn("initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
         try:
             self.abs_boundary
         except AttributeError:
-            print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
+            warnings.warn("absorbing boundary (abs_boundary) was not specified, thus it is turned off")
             self.abs_boundary = 1.
 
         # get coordinate step sizes

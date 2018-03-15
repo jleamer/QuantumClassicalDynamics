@@ -3,9 +3,9 @@ import numexpr as ne
 from scipy import fftpack # Tools for fourier transform
 from scipy import linalg # Linear algebra for dense matrix
 from types import MethodType, FunctionType
+import warnings
 
-
-class SplitOpSchrodinger1D:
+class SplitOpSchrodinger1D(object):
     """
     The second-order split-operator propagator of the 1D Schrodinger equation
     in the coordinate representation
@@ -64,13 +64,13 @@ class SplitOpSchrodinger1D:
         try:
             self.t
         except AttributeError:
-            print("Warning: Initial time (t) was not specified, thus it is set to zero.")
+            warnings.warn("initial time (t) was not specified, thus it is set to zero.")
             self.t = 0.
 
         try:
             self.abs_boundary
         except AttributeError:
-            print("Warning: Absorbing boundary (abs_boundary) was not specified, thus it is turned off")
+            warnings.warn("absorbing boundary (abs_boundary) was not specified, thus it is turned off")
             self.abs_boundary = 1.
 
         # get coordinate step size
@@ -138,31 +138,41 @@ class SplitOpSchrodinger1D:
         """
         for _ in range(time_steps):
 
-            # make a half step in time
-            self.t += 0.5 * self.dt
-
-            # efficiently calculate expV
-            ne.evaluate(self.code_expV, local_dict=vars(self), out=self.expV)
-            self.wavefunction *= self.expV
-
-            # going to the momentum representation
-            self.wavefunction = fftpack.fft(self.wavefunction, overwrite_x=True)
-            ne.evaluate(self.code_expK, local_dict=vars(self), out=self.wavefunction)
-
-            # going back to the coordinate representation
-            self.wavefunction = fftpack.ifft(self.wavefunction, overwrite_x=True)
-            self.wavefunction *= self.expV
-
-            # normalize
-            # this line is equivalent to
-            # self.wavefunction /= np.sqrt(np.sum(np.abs(self.wavefunction)**2)*self.dX)
-            self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
-
-            # make a half step in time
-            self.t += 0.5 * self.dt
+            # advance the wavefunction by dt
+            self.single_step_propagation()
 
             # calculate the Ehrenfest theorems
             self.get_Ehrenfest()
+
+        return self.wavefunction
+
+    def single_step_propagation(self):
+        """
+        Perform a single step propagation of the wavefunction. The wavefunction is normalized.
+        :return: self.wavefunction
+        """
+        # make a half step in time
+        self.t += 0.5 * self.dt
+
+        # efficiently calculate expV
+        ne.evaluate(self.code_expV, local_dict=vars(self), out=self.expV)
+        self.wavefunction *= self.expV
+
+        # going to the momentum representation
+        self.wavefunction = fftpack.fft(self.wavefunction, overwrite_x=True)
+        ne.evaluate(self.code_expK, local_dict=vars(self), out=self.wavefunction)
+
+        # going back to the coordinate representation
+        self.wavefunction = fftpack.ifft(self.wavefunction, overwrite_x=True)
+        self.wavefunction *= self.expV
+
+        # make a half step in time
+        self.t += 0.5 * self.dt
+
+        # normalize
+        # this line is equivalent to
+        # self.wavefunction /= np.sqrt(np.sum(np.abs(self.wavefunction)**2)*self.dX)
+        self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
 
         return self.wavefunction
 

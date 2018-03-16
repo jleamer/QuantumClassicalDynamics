@@ -81,6 +81,9 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
         :param time_steps:  number of self.dt time increments to make
         :return: self.wavefunction
         """
+        # a boolean flag indicating whether a quantum jump has happened
+        jump = False
+
         # Calculate lambda_A(t) and lambda_B(t)
         lambda_A_previous = self.get_lambda_A()
         lambda_B_previous = self.get_lambda_B()
@@ -105,6 +108,8 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
             #
             ####################################################################################
             for k in np.where(self.P_A <= self.r_A)[0]:
+                jump = True
+
                 # reset the probabilities
                 self.P_A[k] = 1.
                 self.r_A[k] = uniform()
@@ -112,10 +117,9 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
                 # Apply the dissipator onto the wavefunction
                 self.apply_A[k](self)
 
-                # normalize
-                self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
-
             for k in np.where(self.P_B <= self.r_B)[0]:
+                jump = True
+
                 # reset the probabilities
                 self.P_B[k] = 1.
                 self.r_B[k] = uniform()
@@ -123,8 +127,16 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
                 # Apply the dissipator onto the wavefunction
                 self.apply_B[k](self)
 
+            # the wave function jumped, then normalize and re-calculate lambdas
+            if jump:
                 # normalize
                 self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
+
+                # Calculate lambda_A(t + dt) and lambda_B(t + dt)
+                lambda_A_next = self.get_lambda_A()
+                lambda_B_next = self.get_lambda_B()
+
+                jump = False
 
             # update lambda_A(t) and lambda_B(t)
             lambda_A_previous = lambda_A_next
@@ -201,8 +213,8 @@ if __name__ == '__main__':
         self.wavefunction *= self.P
 
         # Go back to the coordinate representation
-        ne.evaluate("(-1) ** k * wavefunction", local_dict=vars(self), out=self.wavefunction)
         self.wavefunction = fftpack.ifft(self.wavefunction, overwrite_x=True)
+        ne.evaluate("(-1) ** k * wavefunction", local_dict=vars(self), out=self.wavefunction)
 
     params = dict(
         X_gridDIM=512,
@@ -210,7 +222,7 @@ if __name__ == '__main__':
         dt=0.01,
         t=0.,
 
-        omega=uniform(2, 5),
+        omega=uniform(4, 8),
 
         V="0.5 * (omega * X) ** 2",
         diff_V="omega ** 2 * X",
@@ -219,12 +231,12 @@ if __name__ == '__main__':
         diff_K="P",
 
         # Specify the dissipators
-        gammaA = uniform(0., 1.),
+        gammaA = uniform(0., 0.5),
 
         AdaggerA_X=("(gammaA * X) ** 2",),
         apply_A=(apply_A,),
 
-        gammaB=uniform(0., 0.1),
+        gammaB=uniform(0., 0.2),
 
         BdaggerB_P=("(gammaB * P) ** 2",),
         apply_B=(apply_B,),
@@ -294,11 +306,11 @@ if __name__ == '__main__':
 
     ax2.set_title("Probability plot")
 
-    ax2.plot(time, P_A, '*-', label='Probablity $P_A(t)$')
-    ax2.plot(time, P_B, '*-', label='Probablity $P_B(t)$')
+    ax2.plot(time, P_A, '-', label='Probablity $P_A(t)$')
+    ax2.plot(time, P_B, '-', label='Probablity $P_B(t)$')
 
-    ax2.plot(time, r_A, '*-', label='Chosen constant $r_A$')
-    ax2.plot(time, r_B, '*-', label='Chosen constant $r_B$')
+    ax2.plot(time, r_A, '-', label='Chosen constant $r_A$')
+    ax2.plot(time, r_B, '-', label='Chosen constant $r_B$')
 
     ax2.legend()
     ax2.set_ylabel('Probablity $P_A(t)$')

@@ -133,14 +133,14 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
                 self.wavefunction /= linalg.norm(self.wavefunction) * np.sqrt(self.dX)
 
                 # Calculate lambda_A(t + dt) and lambda_B(t + dt)
-                lambda_A_next = self.get_lambda_A()
-                lambda_B_next = self.get_lambda_B()
+                lambda_A_previous = self.get_lambda_A()
+                lambda_B_previous = self.get_lambda_B()
 
                 jump = False
-
-            # update lambda_A(t) and lambda_B(t)
-            lambda_A_previous = lambda_A_next
-            lambda_B_previous = lambda_B_next
+            else:
+                # update lambda_A(t) and lambda_B(t)
+                lambda_A_previous = lambda_A_next
+                lambda_B_previous = lambda_B_next
 
         return self.wavefunction
 
@@ -149,6 +149,10 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
         Calculate lambda_{A_k}(t) = < A_k^\dagger A_k (x) > for all k
         :return: np.array
         """
+        # Return 0 if there are no A operators
+        if not self.AdaggerA_X:
+            return 0.
+
         result = np.fromiter(
             (ne.evaluate(code, local_dict=vars(self)).real for code in self.code_lambda_A),
             np.float, len(self.code_lambda_A)
@@ -161,6 +165,10 @@ class WavefuncMonteCarloPoission(SplitOpSchrodinger1D):
         Calculate lambda_{A_k}(t) = < A_k^\dagger A_k (x) > for all k
         :return: np.array
         """
+        # Return 0 if there are no B operators
+        if not self.BdaggerB_P:
+            return 0.
+
         # calculate density in the momentum representation
         ne.evaluate("(-1) ** k * wavefunction", local_dict=vars(self), out=self.wavefunction_p)
 

@@ -105,9 +105,8 @@ if __name__=='__main__':
     rho_traj = np.zeros_like(monte_carlo_rho) # monte_carlo_rho is average of rho_traj
 
     # launch 1000 trajectories
-    num_trajs = 1000
     from itertools import repeat
-    trajs = repeat((wave_params, init_wave), num_trajs)
+    trajs = repeat((wave_params, init_wave), 1000)
 
     # run each Monte Carlo trajectories on multiple cores
     with Pool() as pool:
@@ -147,14 +146,14 @@ if __name__=='__main__':
 
     plt.subplot(121)
     plt.title("$\\rho$ via the density matrix propagator")
-    plt.imshow(np.abs(rho_prop.rho) ** 2, **img_params)
+    plt.imshow(np.abs(rho_prop.rho), **img_params)
     plt.xlabel("$x$ (a.u.)")
     plt.ylabel("$x$ (a.u.)")
     plt.colorbar()
 
     plt.subplot(122)
     plt.title("$\\rho$ via Monte Carlo")
-    plt.imshow(np.abs(monte_carlo_rho) ** 2, **img_params)
+    plt.imshow(np.abs(monte_carlo_rho), **img_params)
     plt.xlabel("$x$ (a.u.)")
     plt.ylabel("$x$ (a.u.)")
     plt.colorbar()

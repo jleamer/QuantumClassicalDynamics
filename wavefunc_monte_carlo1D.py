@@ -1,3 +1,4 @@
+# safe import
 try:
     from split_op_schrodinger1D import SplitOpSchrodinger1D, ne, np, fftpack, linalg
 except ModuleNotFoundError:

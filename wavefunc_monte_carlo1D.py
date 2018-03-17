@@ -1,4 +1,8 @@
-from split_op_schrodinger1D import SplitOpSchrodinger1D, ne, np, fftpack, linalg
+try:
+    from split_op_schrodinger1D import SplitOpSchrodinger1D, ne, np, fftpack, linalg
+except ModuleNotFoundError:
+    from .split_op_schrodinger1D import SplitOpSchrodinger1D, ne, np, fftpack, linalg
+
 from numpy.random import uniform
 
 # We will use the inheritance in the object orienting programing (see, e.g.,

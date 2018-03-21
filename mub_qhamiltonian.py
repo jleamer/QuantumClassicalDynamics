@@ -154,6 +154,18 @@ if __name__ == '__main__':
                             K="0.5 * P ** 2",
                         )
 
+        """
+        # Display the potential energy
+        plt.title("Potential energy")
+        plt.plot(
+            harmonic_osc.X,
+            ne.evaluate(harmonic_osc.V, local_dict=vars(harmonic_osc))
+        )
+        plt.xlabel('$x$ (a.u.)')
+        plt.ylabel('Potential energy $V$ (a.u.)')
+        plt.show()
+        """
+
         # plot eigenfunctions
         for n in range(4):
             plt.plot(harmonic_osc.X, harmonic_osc.get_eigenstate(n).real, label=str(n))

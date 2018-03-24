@@ -61,8 +61,6 @@ if __name__=='__main__':
     #
     ####################################################################################
 
-    np.random.seed(21231)
-
     # parameters for the density matrix propagator
     rho_params = dict(
         t=0.,

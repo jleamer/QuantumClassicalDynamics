@@ -45,13 +45,20 @@ def get_seeds(size):
     # get the maximum value of np.uint32 can take
     max_val = np.iinfo(np.uint32).max
 
-    # get the randomize initial seed not to run out of the accessible values of np.uint32
-    initial_seed = np.random.randint(max_val - size)
+    # A set of unique and random np.uint32
+    seeds = set()
 
-    return np.arange(initial_seed, initial_seed + size, dtype=np.uint32)
+    # generate random numbers until we have sufficiently many nonrepeating numbers
+    while len(seeds) < size:
+        seeds.update(
+            np.random.randint(max_val, size=size, dtype=np.uint32)
+        )
+
+    # make sure we do not return more numbers that we are asked for
+    return np.fromiter(seeds, np.uint32, size)
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
 
     from split_op_denisty_matrix import DensityMatrix
 
@@ -184,7 +191,3 @@ if __name__=='__main__':
     plt.colorbar()
 
     plt.show()
-
-
-
-

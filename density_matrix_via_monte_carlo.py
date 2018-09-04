@@ -11,12 +11,18 @@ def propagate_traj(args):
     A function that propagates a single quantum trajectory
     :param params: dictionary of parameters to initialize the Monte Carlo propagator
     :param init_wavefunc:
+    :param seed: the seed for random number generator
     :return: numpy.array contanning the final wavefunction
     """
-    params, init_wavefunc = args
+    params, init_wavefunc, seed = args
 
     # Since there are many trajectories are run in parallel use only a single thread
     ne.set_num_threads(1)
+
+    # Set the seed for random number generation to avoid the artifact described in
+    #   https://stackoverflow.com/questions/24345637/why-doesnt-numpy-random-and-multiprocessing-play-nice
+    # It is recommended that seeds be generate via the function get_seeds (see below)
+    np.random.seed(seed)
 
     # initialize the propagator
     qsys = WavefuncMonteCarloPoission(**params).set_wavefunction(init_wavefunc)
@@ -25,7 +31,34 @@ def propagate_traj(args):
     return qsys.propagate(params["ntsteps"])
 
 
-if __name__=='__main__':
+def get_seeds(size):
+    """
+    Generate unique random seeds for subsequently seeding them into random number generators in multiprocessing simulations
+
+    This utility is to avoid the following artifact:
+        https://stackoverflow.com/questions/24345637/why-doesnt-numpy-random-and-multiprocessing-play-nice
+    :param size: number of samples to generate
+    :return: numpy.array of np.uint32
+    """
+    # Note that np.random.seed accepts 32 bit unsigned integers
+
+    # get the maximum value of np.uint32 can take
+    max_val = np.iinfo(np.uint32).max
+
+    # A set of unique and random np.uint32
+    seeds = set()
+
+    # generate random numbers until we have sufficiently many nonrepeating numbers
+    while len(seeds) < size:
+        seeds.update(
+            np.random.randint(max_val, size=size, dtype=np.uint32)
+        )
+
+    # make sure we do not return more numbers that we are asked for
+    return np.fromiter(seeds, np.uint32, size)
+
+
+if __name__ == '__main__':
 
     from split_op_denisty_matrix import DensityMatrix
 
@@ -104,15 +137,14 @@ if __name__=='__main__':
     monte_carlo_rho = np.zeros_like(rho_prop.rho)
     rho_traj = np.zeros_like(monte_carlo_rho) # monte_carlo_rho is average of rho_traj
 
-    # launch 1000 trajectories
-    from itertools import repeat
-    trajs = repeat((wave_params, init_wave), 1000)
+    # the iterator to launch 1000 trajectories
+    iter_trajs = ((wave_params, init_wave, seed) for seed in get_seeds(1000))
 
     # run each Monte Carlo trajectories on multiple cores
     with Pool() as pool:
         # index counting the trajectory needed to calculate the mean iteratively
         t = 0
-        for psi in pool.imap_unordered(propagate_traj,  trajs, chunksize=100):
+        for psi in pool.imap_unordered(propagate_traj, iter_trajs, chunksize=100):
 
             # form the density matrix out of the wavefunctions
             np.outer(psi.conj(), psi, out=rho_traj)
@@ -159,7 +191,3 @@ if __name__=='__main__':
     plt.colorbar()
 
     plt.show()
-
-
-
-

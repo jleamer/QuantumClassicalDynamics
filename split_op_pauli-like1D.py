@@ -397,6 +397,14 @@ class SplitOpPauliLike1D(object):
                 -evaluate(self.code_P_average_RHS, local_dict=vars(self), global_dict=sys_params) * self.dX
             )
 
+    @property
+    def coordinate_density(self):
+        """
+        Return a copy of the coordinate density
+        :return: numpy.array
+        """
+        return evaluate("real(abs(psi1) ** 2 + abs(psi2) ** 2)", local_dict=vars(self))
+
     def set_wavefunction(self, psi1="0. * X", psi2="0. * X"):
         """
         Set the initial wave function
@@ -524,6 +532,3 @@ if __name__ == '__main__':
     plt.show()
 
     ##################################################################################################
-
-
-
